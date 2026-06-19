@@ -1,5 +1,5 @@
 from utils.ExARM import ExArm
-from utils.leap_kinematics import URDFFinger
+from utils.LeapKinematics import LeapKinematics
 import time
 import numpy as np
 import pygame
@@ -15,16 +15,8 @@ leap_hand = ExArm(
     offsets=[0,-90,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     model_path="Data/mujoco_robot.urdf"
 )
+leap_kinematics = LeapKinematics()
 
-# =========================
-# FINGERS
-# =========================
-index = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_tip")
-middle = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_2_tip")
-ring = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_3_tip")
-thumb = URDFFinger("Data/robot.urdf", "palm_lower_left", "thumb_fingertip_tip")
-
-fingers = [index, middle, ring, thumb]
 
 # =========================
 # INIT KEY CONTROL
@@ -48,39 +40,24 @@ while running:
 
     keys = pygame.key.get_pressed()
 
-    # finger 1
     if keys[pygame.K_q]: q[0] += step
     if keys[pygame.K_a]: q[0] -= step
-
-    # finger 2
     if keys[pygame.K_w]: q[1] += step
     if keys[pygame.K_s]: q[1] -= step
-
-    # finger 3
     if keys[pygame.K_e]: q[2] += step
     if keys[pygame.K_d]: q[2] -= step
-
-    # finger 4
     if keys[pygame.K_r]: q[3] += step
     if keys[pygame.K_f]: q[3] -= step
 
-    fk_input = np.radians(q)
+    q_full = np.tile(q, 4)  # same 4 joints repeated for all 4 fingers
 
-    positions = []  # reset every loop properly
-    fk_sols = []
+    target = leap_kinematics.fk_degree(q_full)        # (4, 3) fingertip positions
+    leap_kinematics.print_fk(np.radians(q_full))
 
-    for finger in fingers:
-        fk_sol = finger.fk(fk_input)
-        ik_sol = finger.ik(fk_sol)  
+    ik_sol, infos = leap_kinematics.ik_degree(target)  # unpack tuple
+    ik_target = leap_kinematics.fk_degree(ik_sol)
 
-        fk_sols.append(fk_sol)
-
-        positions.append(ik_sol)
-
-    positions = np.concatenate(positions)
-
-    leap_hand.set_goal_positions_degree(np.rad2deg(positions))
-    print(f"current Pos: {fk_sols}")
-
+    leap_hand.set_goal_positions_degree(ik_sol)
+    print(f"current Pos: {ik_target}")
 
     time.sleep(0.01)

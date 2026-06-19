@@ -1,6 +1,4 @@
 from utils.ExARM import ExArm
-from utils.planar_kinematics import PlanarFinger
-from utils.leap_kinematics import URDFFinger
 import time
 import numpy as np
 
@@ -20,3 +18,5 @@ positions, velocities, currents = arm.get_state()
 
 arm.set_torque_enable(False)
 arm.close_port()
+
+time.sleep(100)

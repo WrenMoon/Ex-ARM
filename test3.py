@@ -1,6 +1,5 @@
 from utils.ExARM import ExArm
-from utils.planar_kinematics import PlanarFinger
-from utils.leap_kinematics import URDFFinger
+from utils.LeapKinematics import LeapKinematics
 import time
 import numpy as np
 
@@ -17,10 +16,10 @@ leap_hand = ExArm(
 # =========================
 # FINGERS
 # =========================
-index = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_tip")
-middle = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_2_tip")
-ring = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_3_tip")
-thumb = URDFFinger("Data/robot.urdf", "palm_lower_left", "thumb_fingertip_tip")
+index = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip", ee_offset=[-0.0175, 0.0435, 0])
+middle = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_2", ee_offset=[-0.0175, 0.0435, 0])
+ring = URDFFinger("Data/robot.urdf", "palm_lower_left", "fingertip_3", ee_offset=[-0.0175, 0.0435, 0])
+thumb = URDFFinger("Data/robot.urdf", "palm_lower_left", "thumb_fingertip", ee_offset=[-0.0175, 0.0435, 0])
 
 fingers = [index, middle, ring, thumb]
 

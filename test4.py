@@ -1,6 +1,6 @@
 from pathlib import Path
 
-urdf_path = Path("Ex-ARM/leap_left/mujoco_robot.urdf")
+urdf_path = Path("Data/mujoco_robot.urdf")
 
 text = urdf_path.read_text(encoding="utf-8")
 
