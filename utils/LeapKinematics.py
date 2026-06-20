@@ -201,6 +201,96 @@ def _finger_fk(j0_tf, j1_tf, j2_tf, j3_tf, tip_xyz, q):
 
 
 # ---------------------------------------------------------------------------
+# Thumb — dedicated FK (replaces generic _finger_fk for finger_idx=3)
+# ---------------------------------------------------------------------------
+#
+# Chain (all axis = z, all joints negate: rot_z(-q)):
+#
+#  palm
+#   └─[joint 13: rpy=[0, π/2, 0]]──► thumb_left_temp_base   (q[13]: in/out of palm)
+#       └─[joint 12: rpy=[-π/2,-π/2, 0]]──► thumb_pip        (q[12]: twist own axis)
+#           └─[joint 14: rpy=[-π/2, 0, 0]]──► thumb_dip      (q[14]: PIP)
+#               └─[joint 15: rpy=[0, 0, -π]]──► thumb_fingertip (q[15]: DIP)
+#
+# Tip offset: zero — we use the thumb_fingertip frame origin as the tip.
+# (The URDF visual origin on thumb_fingertip is a mesh centroid, not the tip.)
+# A small anatomical forward offset along local +y of ~20mm can be added if needed.
+
+_THB_TIP_OFFSET = np.array([0.0, 0.02, 0.0])   # ~20mm forward along thumb_fingertip local y
+
+def _thumb_fk(q):
+    """
+    Dedicated thumb FK.
+
+    Parameters
+    ----------
+    q : [q12, q13, q14, q15] in radians
+        q[0] = q12 = twist around own axis
+        q[1] = q13 = rotate in/out of palm  (parent joint, applied first)
+        q[2] = q14 = PIP
+        q[3] = q15 = DIP
+
+    Returns
+    -------
+    tip_pos    : (3,) fingertip position in palm frame
+    transforms : [T_base, T_pip, T_dip, T_tip]  (4×4 each)
+    """
+    q12, q13, q14, q15 = q
+
+    # Step 1: palm → thumb_left_temp_base  via joint 13
+    T_j13 = _tf(
+        np.array([-0.144874224938, -0.090040011501,  0.004900888584]),
+        np.array([ 0.0,             np.pi / 2,        0.0])
+    )
+    T_base = T_j13 @ _rot_z(-q13)
+
+    # Step 2: thumb_left_temp_base → thumb_pip  via joint 12
+    T_j12 = _tf(
+        np.array([ 0.0,            -0.014100001263, -0.012999956035]),
+        np.array([-np.pi / 2,      -np.pi / 2,       0.0])
+    )
+    T_pip = T_base @ T_j12 @ _rot_z(-q12)
+
+    # Step 3: thumb_pip → thumb_dip  via joint 14
+    T_j14 = _tf(
+        np.array([ 0.0,             0.014499996778, -0.017000042855]),
+        np.array([-np.pi / 2,       0.0,             0.0])
+    )
+    T_dip = T_pip @ T_j14 @ _rot_z(-q14)
+
+    # Step 4: thumb_dip → thumb_fingertip  via joint 15
+    T_j15 = _tf(
+        np.array([ 0.0,             0.046599996833,  0.000200006545]),
+        np.array([ 0.0,             0.0,            -np.pi])
+    )
+    T_tip_frame = T_dip @ T_j15 @ _rot_z(-q15)
+
+    # Tip position = frame origin + small anatomical forward offset
+    tip_h   = np.array([*_THB_TIP_OFFSET, 1.0])
+    tip_pos = (T_tip_frame @ tip_h)[:3]
+
+    return tip_pos, [T_base, T_pip, T_dip, T_tip_frame]
+
+def _thumb_init_guesses():
+    """Seed poses covering the thumb's reachable workspace."""
+    return [
+        np.array([ 0.0,    0.0,   0.0,  0.0 ]),   # neutral
+        np.array([ 0.0,   -1.0,   0.8,  0.8 ]),   # pinch
+        np.array([-1.0,   -1.5,   0.5,  0.5 ]),   # opposition
+        np.array([ 0.0,   -2.0,   1.5,  1.0 ]),   # deep flex
+        np.array([ 0.3,   -0.5,   1.0,  1.5 ]),   # lateral
+    ]
+
+def _finger_init_guesses():
+    """Existing seeds for index/middle/ring."""
+    return [
+        np.zeros(4),
+        np.array([0.0, 1.0, 1.0, 1.0]),
+        np.array([0.0, 1.5, 1.5, 1.0]),
+        np.array([0.5, 0.5, 0.5, 0.5]),
+    ]
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -274,7 +364,10 @@ class LeapKinematics:
         tip_pos : (3,) fingertip xyz in palm frame (metres)
         transforms : list of 4 intermediate 4×4 transforms
         """
-        p = self._FINGER_PARAMS[finger_idx]
+        if finger_idx == 3:                        # Thumb — dedicated function
+            return _thumb_fk(q4)
+
+        p = self._FINGER_PARAMS[finger_idx]        # Index / Middle / Ring
         return _finger_fk(p[1], p[0], p[2], p[3], p[4], q4)
 
     def fk(self, q: np.ndarray):
@@ -319,18 +412,17 @@ class LeapKinematics:
         for i, name in enumerate(self.FINGER_NAMES):
             q4 = q[i*4:(i+1)*4]
             tip_pos, transforms = self.fk_finger(i, q4)
-            result[name] = {
-                "mcp": transforms[0][:3, 3],
-                "pip": transforms[1][:3, 3],
-                "dip": transforms[2][:3, 3],
-                "tip": tip_pos,
-            }
+            if i == 3:  # thumb
+                keys = ["base", "pip", "dip", "tip"]
+            else:
+                keys = ["mcp", "pip", "dip", "tip"]
+            result[name] = {k: (transforms[j][:3, 3] if k != "tip" else tip_pos)
+                            for j, k in enumerate(keys)}
         return result
 
     # ------------------------------------------------------------------
     # Inverse Kinematics
     # ------------------------------------------------------------------
-
     def ik_finger(
         self,
         finger_idx: int,
@@ -346,7 +438,8 @@ class LeapKinematics:
         ----------
         finger_idx : 0=Index, 1=Middle, 2=Ring, 3=Thumb
         target_pos : (3,) desired fingertip position in palm frame (metres)
-        q0         : (4,) initial joint angles in radians (optional)
+        q0         : (4,) initial joint angles in radians (optional).
+                    If None, uses best structured seed for the finger type.
         tol        : position tolerance in metres
         max_iter   : maximum optimiser iterations
 
@@ -356,12 +449,13 @@ class LeapKinematics:
         info   : dict with keys 'success', 'error_m', 'message'
         """
         target_pos = np.asarray(target_pos, dtype=float)
-        lo = self.limits[finger_idx*4:(finger_idx+1)*4, 0]
-        hi = self.limits[finger_idx*4:(finger_idx+1)*4, 1]
+        lo = self.limits[finger_idx * 4:(finger_idx + 1) * 4, 0]
+        hi = self.limits[finger_idx * 4:(finger_idx + 1) * 4, 1]
         bounds = list(zip(lo, hi))
 
         if q0 is None:
-            q0 = (lo + hi) / 2.0   # midpoint initialisation
+            # Use first structured seed instead of midpoint — much better starting point
+            q0 = self._structured_seeds(finger_idx)[0]
 
         q0 = np.clip(np.asarray(q0, dtype=float), lo, hi)
 
@@ -397,18 +491,25 @@ class LeapKinematics:
         seed: int = 0,
     ):
         """
-        IK with multiple random restarts for robustness.
+        IK with structured seeds + random restarts for robustness.
 
-        Returns the solution with the smallest position error.
+        Structured seeds are tried first (finger-type-aware), then random
+        restarts fill the remainder up to n_starts. Returns the solution
+        with the smallest position error.
         """
         rng = np.random.default_rng(seed)
-        lo = self.limits[finger_idx*4:(finger_idx+1)*4, 0]
-        hi = self.limits[finger_idx*4:(finger_idx+1)*4, 1]
+        lo = self.limits[finger_idx * 4:(finger_idx + 1) * 4, 0]
+        hi = self.limits[finger_idx * 4:(finger_idx + 1) * 4, 1]
+
+        # Build candidate list: structured seeds first, then random
+        structured = self._structured_seeds(finger_idx)
+        n_random   = max(0, n_starts - len(structured))
+        random_seeds = [rng.uniform(lo, hi) for _ in range(n_random)]
+        candidates = structured + random_seeds
 
         best_q, best_info = None, {"error_m": np.inf, "success": False}
 
-        for _ in range(n_starts):
-            q0 = rng.uniform(lo, hi)
+        for q0 in candidates:
             q_sol, info = self.ik_finger(finger_idx, target_pos, q0, tol, max_iter)
             if info["error_m"] < best_info["error_m"]:
                 best_q, best_info = q_sol, info
@@ -455,6 +556,33 @@ class LeapKinematics:
             infos.append(info)
 
         return q_sol, infos
+    
+    def _structured_seeds(self, finger_idx: int):
+        """
+        Returns a list of (4,) seed joint-angle arrays (radians) tailored
+        to each finger's geometry and typical workspace.
+
+        For index/middle/ring the seeds cover neutral → increasing flex.
+        For thumb they cover neutral, pinch, opposition, deep-flex, lateral.
+        """
+        if finger_idx == 3:   # Thumb: [q12-twist, q13-palm, q14-PIP, q15-DIP]
+            return [
+                np.array([ 0.0,   0.0,   0.0,  0.0]),   # neutral / fully open
+                np.array([ 0.0,  -1.0,   0.8,  0.8]),   # light pinch
+                np.array([-1.0,  -1.5,   0.5,  0.5]),   # opposition
+                np.array([ 0.0,  -2.0,   1.5,  1.0]),   # deep flex
+                np.array([ 0.3,  -0.5,   1.0,  1.5]),   # lateral pinch
+                np.array([-0.5,  -1.0,   1.2,  1.2]),   # mid opposition
+            ]
+        else:                 # Index / Middle / Ring: [q_abduct, q_flex, q_PIP, q_DIP]
+            return [
+                np.array([0.0,  0.0,  0.0,  0.0]),      # neutral / fully open
+                np.array([0.0,  1.0,  1.0,  1.0]),      # half curl
+                np.array([0.0,  1.5,  1.5,  1.0]),      # three-quarter curl
+                np.array([0.0,  2.0,  1.8,  1.5]),      # full fist
+                np.array([0.5,  1.0,  1.0,  1.0]),      # abducted half curl
+                np.array([-0.5, 1.0,  1.0,  1.0]),      # adducted half curl
+            ]
 
     def ik_degree(self, targets: np.ndarray, **kwargs):
         """Full-hand IK, returns joint angles in degrees."""
@@ -507,3 +635,4 @@ class LeapKinematics:
         for i, name in enumerate(self.FINGER_NAMES):
             x, y, z = tips[i]
             print(f"  {name:6s}: x={x:+.4f}  y={y:+.4f}  z={z:+.4f}")
+    
