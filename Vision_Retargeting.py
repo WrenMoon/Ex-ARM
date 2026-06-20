@@ -62,9 +62,9 @@ PALM_OFFSET = np.array([
 ALPHA = 0.25
 
 # IK settings
-IK_N_STARTS = 4
+IK_N_STARTS = 1
 IK_TOL_M = 5e-4
-IK_MAX_ITER = 150
+IK_MAX_ITER = 30
 
 
 # ============================================================
@@ -238,12 +238,11 @@ def main():
         print(f"  {name:<8}  {x:+.4f}  {y:+.4f}  {z:+.4f}")
     print("\nThese are your calibration targets. Press Q to quit.\n")
 
-    # Instantiate robot interface (sim or real)
     leap_hand = ExArm(
         mode="sim",                  # change to "real" for hardware
         ids=list(range(16)),
         port="COM5",
-        baudrate=40000,
+        baudrate=4000000,
         offsets=[0, -90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         model_path="Data/mujoco_robot.urdf",
     )
@@ -301,6 +300,7 @@ def main():
 
                 # OPTIONAL: quick debug compare (hand open)
                 # print_debug(mp_targets, fk_ref)
+                leap_hand.set_custom_markers(mp_targets)
 
                 # Solve IK — warm-started from previous frame's solution
                 q_rad, infos = kin.ik(
@@ -320,7 +320,7 @@ def main():
                 smoothed_q_deg = ALPHA * q_deg + (1 - ALPHA) * smoothed_q_deg
 
                 # Print status and send to robot
-                print_status(mp_targets, infos, smoothed_q_deg)
+                # print_status(mp_targets, infos, smoothed_q_deg)
                 leap_hand.set_goal_positions_degree(np.round(smoothed_q_deg, 1))
                 leap_hand.set_torque_enabled(True)
 

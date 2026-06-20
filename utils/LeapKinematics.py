@@ -109,7 +109,7 @@ _IDX_J2_rpy = np.array([ 1.5707963268,   -1.5707963268,   0.0])
 _IDX_J3_xyz = np.array([ 0.0,            -0.036100004210, 0.000200006124])
 _IDX_J3_rpy = np.array([ 0.0,             0.0,            0.0])
 # Fingertip offset (visual origin used as tip position)
-_IDX_TIP_xyz = np.array([0.013286424109, -0.006114238387, 0.014499995133])
+_IDX_TIP_xyz = np.array([-0.00421, -0.0496, 0.014499994959])
 
 # --- Middle finger (joints 4,5,6,7) ---
 _MID_J5_xyz = np.array([-0.082574224939, -0.040290011501, 0.007800888584])
@@ -120,7 +120,7 @@ _MID_J6_xyz = np.array([ 0.014999964750,  0.014299998633,-0.013000025424])
 _MID_J6_rpy = np.array([ 1.5707963268,   -1.5707963268,   0.0])
 _MID_J7_xyz = np.array([ 0.0,            -0.036099998752, 0.000200007512])
 _MID_J7_rpy = np.array([ 0.0,             0.0,            0.0])
-_MID_TIP_xyz = np.array([0.013286424109, -0.006114238387, 0.014499994924])
+_MID_TIP_xyz = np.array([-0.00421, -0.0496, 0.014499994959])
 
 # --- Ring finger (joints 8,9,10,11) ---
 _RNG_J9_xyz  = np.array([-0.082574224938,  0.005159988499, 0.007800888584])
@@ -131,7 +131,7 @@ _RNG_J10_xyz = np.array([ 0.014999968220,  0.014299998980,-0.013000025424])
 _RNG_J10_rpy = np.array([ 1.5707963268,   -1.5707963268,   0.0])
 _RNG_J11_xyz = np.array([ 0.0,            -0.036099998683, 0.000200007859])
 _RNG_J11_rpy = np.array([ 0.0,             0.0,            0.0])
-_RNG_TIP_xyz = np.array([0.013286424109, -0.006114238387, 0.014499994959])
+_RNG_TIP_xyz = np.array([-0.00421, -0.0496, 0.014499994959])
 
 # --- Thumb (joints 12,13,14,15) ---
 # URDF joint 13: palm → thumb_left_temp_base
@@ -146,7 +146,7 @@ _THB_J14_rpy = np.array([-1.5707963268,    0.0,            0.0])
 # URDF joint 15: thumb_dip → thumb_fingertip
 _THB_J15_xyz = np.array([ 0.0,             0.046599996833, 0.000200006545])
 _THB_J15_rpy = np.array([ 0.0,             0.0,           -3.1415926536])
-_THB_TIP_xyz = np.array([0.062559538463,   0.078459682911, 0.048992911807])
+_THB_TIP_xyz = np.array([-0.005, -0.06206, -0.014])
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +216,6 @@ def _finger_fk(j0_tf, j1_tf, j2_tf, j3_tf, tip_xyz, q):
 # (The URDF visual origin on thumb_fingertip is a mesh centroid, not the tip.)
 # A small anatomical forward offset along local +y of ~20mm can be added if needed.
 
-_THB_TIP_OFFSET = np.array([0.0, 0.02, 0.0])   # ~20mm forward along thumb_fingertip local y
-
 def _thumb_fk(q):
     """
     Dedicated thumb FK.
@@ -266,7 +264,7 @@ def _thumb_fk(q):
     T_tip_frame = T_dip @ T_j15 @ _rot_z(-q15)
 
     # Tip position = frame origin + small anatomical forward offset
-    tip_h   = np.array([*_THB_TIP_OFFSET, 1.0])
+    tip_h = np.array([*_THB_TIP_xyz, 1.0])
     tip_pos = (T_tip_frame @ tip_h)[:3]
 
     return tip_pos, [T_base, T_pip, T_dip, T_tip_frame]
@@ -471,7 +469,9 @@ class LeapKinematics:
             options={"maxiter": max_iter, "ftol": 1e-12, "gtol": 1e-8},
         )
 
-        q_sol = result.x
+        q_sol = result.x.copy()
+        if finger_idx == 3:
+            q_sol[0], q_sol[1] = q_sol[1], q_sol[0]
         tip_final, _ = self.fk_finger(finger_idx, q_sol)
         error = float(np.linalg.norm(tip_final - target_pos))
 
@@ -552,11 +552,25 @@ class LeapKinematics:
             q_i, info = self.ik_finger_multistart(
                 i, targets[i], n_starts=n_starts, tol=tol, max_iter=max_iter
             )
-            q_sol[i*4:(i+1)*4] = q_i
+            q_sol[i*4:(i+1)*4] = q_i    
             infos.append(info)
 
+        # for i in range(4):
+        #     q0_i = q0[i*4:(i+1)*4] if q0 is not None else None
+
+        #     q_i, info = self.ik_finger(
+        #         i,
+        #         targets[i],
+        #         q0=q0_i,
+        #         tol=tol,
+        #         max_iter=max_iter,
+        #     )
+
+        #     q_sol[i*4:(i+1)*4] = q_i
+        #     infos.append(info)
+
         return q_sol, infos
-    
+            
     def _structured_seeds(self, finger_idx: int):
         """
         Returns a list of (4,) seed joint-angle arrays (radians) tailored

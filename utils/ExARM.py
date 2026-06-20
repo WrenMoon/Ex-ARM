@@ -101,6 +101,16 @@ class ExArm:
         if self.sim and hasattr(self.sim, "close"):
             self.sim.close()
 
+    def set_target_markers(self, targets):
+        """
+        Forward target marker positions to the sim backend (if available).
+        'targets' is expected to be an array-like (4,3) in LEAP frame (metres).
+        """
+        if self.sim and hasattr(self.sim, "set_target_markers"):
+            return self.sim.set_target_markers(np.asarray(targets))
+        # real hardware: no-op / ignore
+        return None
+
     # ==================================================
     # Automatic Function Forwarding
     # ==================================================
