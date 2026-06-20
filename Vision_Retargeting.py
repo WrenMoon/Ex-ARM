@@ -239,7 +239,7 @@ def main():
     print("\nThese are your calibration targets. Press Q to quit.\n")
 
     leap_hand = ExArm(
-        mode="sim",                  # change to "real" for hardware
+        mode="both",                  # change to "real" for hardware
         ids=list(range(16)),
         port="COM5",
         baudrate=4000000,

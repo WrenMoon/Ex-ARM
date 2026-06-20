@@ -1,60 +1,105 @@
 import numpy as np
-import time, math
+import time
 from utils.ExARM import ExArm
 
+
+POSES = [
+
+    dict(
+        duration=5,
+        index  =[0, 0, 0, 0],
+        middle =[0, 0, 0, 0],
+        ring   =[0, 0, 0, 0],
+        thumb  =[0, 0, 0, 0],
+    ),
+
+    dict(
+        duration=2,
+        index  =[70, 22, 85, 22],
+        middle =[0, 0, 0, 0],
+        ring   =[-70, 22, 85, 22],
+        thumb  =[-45, -100, 30, 42],
+    ),
+
+    dict(
+        duration=1,
+        index  =[70, 22, 85, 45],
+        middle =[0, 0, 0, 0],
+        ring   =[-70, 22, 85, 45],
+        thumb  =[-65, -100, 30, 42],
+    ),
+
+    dict(
+        duration=1,
+        index  =[70, 0, 85, 0],
+        middle =[0, 0, 0, 0],
+        ring   =[0, 22, 85, 0],
+        thumb  =[-65, -45, 37, 50],
+    ),
+
+    dict(
+        duration=1,
+        index  =[0, 0, 0, 0],
+        middle =[-30, 0, 30, 30],
+        ring   =[0, 45, 85, 0],
+        thumb  =[-65, -45, 37, 50],
+    ),
+
+    dict(
+        duration=2,
+        index  =[0, 55, 0, 0],
+        middle =[0, 55, 55, 37],
+        ring   =[0, 55, 55, 37],
+        thumb  =[-120, -45, 10, 70],
+    ),
+
+    dict(
+        duration=0.5,
+        index  =[0, 55, 55, 37],
+        middle =[0, 55, 55, 37],
+        ring   =[0, 55, 55, 37],
+        thumb  =[-120, -45, 10, 70],
+    ),
+]
+
+
+def pose_to_array(pose):
+    return np.array(
+        pose["index"]
+        + pose["middle"]
+        + pose["ring"]
+        + pose["thumb"],
+        dtype=float,
+    )
+
+
 def main(**kwargs):
+
     leap_hand = ExArm(
         mode="both",
-        ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        ids=[0, 1, 2, 3, 4, 5, 6, 7,
+             8, 9, 10, 11, 12, 13, 14, 15],
         port="COM5",
         baudrate=4000000,
-        offsets=[0,-90,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        offsets=[0, -90, 0, 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0, 0, 0, 0],
         model_path="Data/mujoco_robot.urdf"
     )
-    start_time = time.time()
-    duration = 30
 
-        
-    while time.time() - start_time < duration:
-        if time.time() - start_time < 5:
-            leap_hand.set_goal_positions_degree(np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]))
-        elif time.time() - start_time < 7:
-            leap_hand.set_goal_positions_degree(np.array([70,22,85,22,
-                                            0,0,0,0,
-                                            -70,22,85,22,
-                                            -45,-100,30,42]))
-        elif time.time() - start_time < 8:
-            leap_hand.set_goal_positions_degree(np.array([70,22,85,45,
-                                            0,0,0,0,
-                                            -70,22,85,45,
-                                            -65,-100,30,42]))
-        elif time.time() - start_time < 9:
-            leap_hand.set_goal_positions_degree(np.array([70,0,85,0,     
-                                            0,0,0,0,
-                                            0,22,85,0,
-                                            -65,-45,37,50]))
-        elif time.time() - start_time < 10:
-            leap_hand.set_goal_positions_degree(np.array([0,0,0,0,
-                                            -30,0,30,30,
-                                            0,45,85,0,
-                                            -65,-45,37,50]))
-        elif time.time() - start_time < 12:
-            leap_hand.set_goal_positions_degree(np.array([0,55,0,0,
-                                            0,55,55,37,
-                                            0,55,55,37,
-                                            -120,-45,10,70]))
-        elif time.time() - start_time < 12.5:
-            leap_hand.set_goal_positions_degree(np.array([0,55,55,37,
-                                            0,55,55,37,
-                                            0,55,55,37,
-                                            -120,-45,10,70]))
+    leap_hand.set_torque_enabled(True)
 
-        time.sleep(0.03)
-        leap_hand.set_torque_enabled(True)
-        # positions, velocities, currents = leap_hand.get_state()
-        # print("Positions:", positions)
-    leap_hand.set_torque_enabled(False)
+    UPDATE_PERIOD = 0.03  # seconds
 
+    for pose in POSES:
+
+        target = pose_to_array(pose)
+
+        start = time.time()
+
+        while time.time() - start < pose["duration"]:
+            leap_hand.set_goal_positions_degree(target)
+            leap_hand.set_torque_enabled(True)
+            time.sleep(UPDATE_PERIOD)
 
 
 if __name__ == "__main__":
