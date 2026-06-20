@@ -52,12 +52,12 @@ while running:
     q_full = np.tile(q, 4)  # same 4 joints repeated for all 4 fingers
 
     target = leap_kinematics.fk_degree(q_full)        # (4, 3) fingertip positions
-    leap_kinematics.print_fk(np.radians(q_full))
+    # leap_kinematics.print_fk(np.radians(q_full))
 
-    ik_sol, infos = leap_kinematics.ik_degree(target)  # unpack tuple
+    ik_sol, infos = leap_kinematics.ik_degree([[0,0,0],[0,0,0],[0,0,0],[0,0,0]])  # unpack tuple
     ik_target = leap_kinematics.fk_degree(ik_sol)
 
     leap_hand.set_goal_positions_degree(ik_sol)
-    print(f"current Pos: {ik_target}")
+    print(f"current Pos: {ik_target}", end="\r", flush=True)
 
     time.sleep(0.01)
