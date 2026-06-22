@@ -241,9 +241,9 @@ def main():
     leap_hand = ExArm(
         mode="both",                  # change to "real" for hardware
         ids=list(range(16)),
-        port="COM5",
+        port="COM4",
         baudrate=4000000,
-        offsets=[0, -90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        offsets=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         model_path="Data/mujoco_robot.urdf",
     )
 

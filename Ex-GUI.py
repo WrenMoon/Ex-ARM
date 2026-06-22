@@ -162,9 +162,9 @@ class RobotController:
             self.robot = ExArm(
                 mode="both",
                 ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-                port="COM5",
+                port="COM4",
                 baudrate=4000000,
-                offsets=[0, -90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                offsets=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 model_path="Data/mujoco_robot.urdf"
             )
             return True
@@ -197,6 +197,7 @@ class RobotController:
                     else:
                         angles_array = np.array(self.current_angles)
                     self.robot.set_goal_positions_degree(angles_array)
+                    self.robot.set_torque_enabled(True)
                 time.sleep(1/30)  # ~30 Hz
             except Exception as e:
                 print(f"Error in update loop: {e}")
