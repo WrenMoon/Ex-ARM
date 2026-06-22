@@ -15,6 +15,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import numpy as np
 import os
+from utils.Constants import Connection
+
 
 try:
     from utils.ExARM import ExArm
@@ -227,10 +229,10 @@ class RobotController:
         try:
             self.robot = ExArm(
                 mode="both",
-                ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-                port="COM4",
-                baudrate=40000,
-                offsets=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                ids=Connection.ids,
+                port=Connection.Port,
+                baudrate=Connection.baudrate,
+                offsets=Connection.offsets,
                 model_path="Data/mujoco_robot.urdf"
             )
             return True

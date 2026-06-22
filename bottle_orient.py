@@ -12,6 +12,7 @@ Run directly:  python bottle_orient.py
 import numpy as np
 import time
 from utils.ExARM import ExArm
+from utils.Constants import Connection
 
 
 # ------------------------------------------------------------------ #
@@ -123,12 +124,10 @@ def main(**kwargs):
     """
     leap_hand = ExArm(
         mode="both",
-        ids=[0, 1, 2, 3, 4, 5, 6, 7,
-             8, 9, 10, 11, 12, 13, 14, 15],
-        port="COM5",
-        baudrate=40000,
-        offsets=[0, -90, 0, 0, 0, 0, 0, 0,
-                 0,  0,  0, 0, 0, 0, 0, 0],
+        ids=Connection.ids,
+        port=Connection.Port,
+        baudrate=Connection.baudrate,
+        offsets=Connection.offsets,
         model_path="Data/mujoco_robot.urdf"
     )
 

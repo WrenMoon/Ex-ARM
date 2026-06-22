@@ -19,6 +19,7 @@ import numpy as np
 import os
 import time
 import math
+from utils.Constants import Connection
 from utils.ExARM import ExArm
 
 # Path to the MediaPipe hand landmarker model file.
@@ -136,11 +137,11 @@ def main():
     reduce jitter from landmark noise.
     """
     leap_hand = ExArm(
-        mode="sim",
-        ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-        port="COM5",
-        baudrate=40000,
-        offsets=[0, -90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        mode="both",
+        ids=Connection.ids,
+        port=Connection.Port,
+        baudrate=Connection.baudrate,
+        offsets=Connection.offsets,
         model_path="Data/mujoco_robot.urdf"
     )
 

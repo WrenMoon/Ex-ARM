@@ -22,6 +22,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+from utils.Constants import Connection
 from utils.ExARM import ExArm
 from utils.LeapKinematics import LeapKinematics
 
@@ -275,12 +276,12 @@ def main():
     print("\nThese are your calibration targets. Press Q to quit.\n")
 
     leap_hand = ExArm(
-        mode="both",                 # change to "real" for hardware-only
-        ids=list(range(16)),
-        port="COM4",
-        baudrate=40000,
-        offsets=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        model_path="Data/mujoco_robot.urdf",
+        mode="both",
+        ids=Connection.ids,
+        port=Connection.Port,
+        baudrate=Connection.baudrate,
+        offsets=Connection.offsets,
+        model_path="Data/mujoco_robot.urdf"
     )
 
     # MediaPipe setup
