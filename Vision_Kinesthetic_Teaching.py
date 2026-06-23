@@ -154,9 +154,12 @@ def draw_skeleton(frame, hand, w, h):
 # Recording phase                                                    #
 # ------------------------------------------------------------------ #
 
-def record_motion(name: str, duration_s: float = 10.0):
+def record_motion(name: str, duration_s: float | None = None):
     """
     Record a hand motion from the webcam.
+
+    If duration_s is None, recording continues until you press Q.
+    Otherwise it stops automatically after duration_s seconds.
 
     Saves:
       Motions/{name}.avi          — raw video for preview
@@ -194,13 +197,16 @@ def record_motion(name: str, duration_s: float = 10.0):
     start_time    = time.time()
     frame_idx     = 0
 
-    print(f"\nRecording '{name}' for {duration_s:.1f} seconds...")
-    print("Show your hand to the camera. Press Q to stop early.")
+    if duration_s is None:
+        print(f"\nRecording '{name}'... Press Q to stop.")
+    else:
+        print(f"\nRecording '{name}' for {duration_s:.1f} seconds...")
+    print("Show your hand to the camera. Press Q to stop.")
 
     with HandLandmarker.create_from_options(options) as landmarker:
         while cap.isOpened():
             elapsed = time.time() - start_time
-            if elapsed >= duration_s:
+            if duration_s is not None and elapsed >= duration_s:
                 break
 
             success, frame = cap.read()
@@ -225,7 +231,10 @@ def record_motion(name: str, duration_s: float = 10.0):
             landmark_list.append(pts)
 
             # overlay status
-            status = f"REC  {elapsed:5.1f}s / {duration_s:.1f}s  frame {frame_idx}"
+            if duration_s is None:
+                status = f"REC  {elapsed:5.1f}s  frame {frame_idx}  (press Q to stop)"
+            else:
+                status = f"REC  {elapsed:5.1f}s / {duration_s:.1f}s  frame {frame_idx}"
             cv2.putText(frame, status, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
@@ -438,7 +447,8 @@ def main():
 
         if choice == "1":
             name = input("Motion name: ").strip()
-            dur  = float(input("Duration (seconds, default 10): ") or "10")
+            dur_input = input("Duration in seconds (press Enter to record until Q): ").strip()
+            dur = float(dur_input) if dur_input else None
             record_motion(name, dur)
 
         elif choice == "2":
@@ -467,11 +477,12 @@ def main():
 
         elif choice == "6":
             name = input("Motion name: ").strip()
-            dur  = float(input("Duration (seconds, default 10): ") or "10")
+            dur_input = input("Duration in seconds (press Enter to record until Q): ").strip()
+            dur = float(dur_input) if dur_input else None
             record_motion(name, dur)
             process_motion(name)
             speed = float(input("Replay speed multiplier (default 1.0): ") or "1.0")
-            replay_motion(name, speed=speed)
+            replay_motion(name, speed=speed, robot=True)
 
         elif choice == "0":
             break
