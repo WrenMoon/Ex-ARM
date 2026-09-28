@@ -276,7 +276,7 @@ def main():
     print("\nThese are your calibration targets. Press Q to quit.\n")
 
     leap_hand = ExArm(
-        mode="both",
+        mode=Connection.mode,
         ids=Connection.ids,
         port=Connection.Port,
         baudrate=Connection.baudrate,

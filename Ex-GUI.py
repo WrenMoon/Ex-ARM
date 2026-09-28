@@ -228,7 +228,7 @@ class RobotController:
         """
         try:
             self.robot = ExArm(
-                mode="both",
+                mode=Connection.mode,
                 ids=Connection.ids,
                 port=Connection.Port,
                 baudrate=Connection.baudrate,

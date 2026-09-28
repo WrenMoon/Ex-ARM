@@ -137,7 +137,7 @@ def main():
     reduce jitter from landmark noise.
     """
     leap_hand = ExArm(
-        mode="both",
+        mode=Connection.mode,
         ids=Connection.ids,
         port=Connection.Port,
         baudrate=Connection.baudrate,
@@ -229,7 +229,7 @@ def main():
                     0,       idx_mcp, idx_mcp, idx_mcp,   # Index  (abduct, flex, pip, dip)
                     0,       mid_mcp, mid_pip, mid_dip,   # Middle
                     0,       ring_mcp, ring_pip, ring_dip, # Ring
-                    -90,     0,       thumb_mcp, thumb_ip  # Thumb
+                    90,     0,       thumb_mcp, thumb_ip  # Thumb
                 ], dtype=np.float64)
 
                 # Hard clip to safe operating range before sending to hardware
@@ -247,10 +247,16 @@ def main():
                 leap_hand.set_goal_positions_degree(np.round(smoothed_pose, 1))
                 leap_hand.set_torque_enabled(True)
 
-            cv2.imshow("MediaPipe Hand Tracking", frame)
+            # if Connection.mode == "real":
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            #     cv2.imshow("MediaPipe Hand Tracking", frame)
+
+            #     if cv2.waitKey(1) & 0xFF == ord('q'):
+            #         break
+
+            # else:
+            #     if not cap.isOpened():
+            #         break
 
         cap.release()
         cv2.destroyAllWindows()

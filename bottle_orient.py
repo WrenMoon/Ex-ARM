@@ -123,7 +123,7 @@ def main(**kwargs):
     the motors from going slack between updates).
     """
     leap_hand = ExArm(
-        mode="both",
+        mode=Connection.mode,
         ids=Connection.ids,
         port=Connection.Port,
         baudrate=Connection.baudrate,

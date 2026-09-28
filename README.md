@@ -17,6 +17,7 @@ This suite provides hardware abstraction, MuJoCo simulation, analytical kinemati
 | `Vision_Retargeting` | Webcam → MediaPipe → **IK-based** fingertip retargeting with calibrated axis remapping |
 | `Ex-GUI` | Tkinter GUI pose sequencer — build, edit, play, and export pose sequences interactively |
 | `bottle_orient` | Example scripted manipulation sequence (bottle orientation task) |
+| `Proprioceptive_Shape_Recognition` | Experimental LEAP joint-state/current-based sphere-vs-box recognition |
 
 ---
 
@@ -205,6 +206,33 @@ python Vision_Retargeting.py
 | `ALPHA` | Exponential smoothing factor for joint angles (0–1) |
 
 > The MediaPipe hand tracking model (`hand_landmarker.task`) is **automatically downloaded** on first run if not present.
+
+---
+
+## Proprioceptive Shape Recognition (Experimental)
+
+Run an offline classifier check without connecting to the hand:
+
+```bash
+python Proprioceptive_Shape_Recognition.py --demo
+```
+
+For passive live sampling, set `Connection` in `utils/Constants.py` to the real
+hand configuration, then run:
+
+```bash
+python Proprioceptive_Shape_Recognition.py --current-threshold 25
+```
+
+The program calibrates unloaded motor currents, detects current changes as
+contact proxies, and uses measured joint positions plus `LeapKinematics` FK to
+save fingertip contact samples in `shape_contact_points.csv`. Keep the palm
+and object fixed relative to each other while probing, and release between
+contacts. The current threshold is device- and setup-dependent. The baseline
+only distinguishes sphere-like from box-like point clouds; sparse, noisy, or
+inconclusive samples are reported as ambiguous. LEAP motor current is not a
+dedicated tactile sensor, so validate contact detections and size estimates on
+the physical hand before relying on them.
 
 ---
 

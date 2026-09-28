@@ -354,7 +354,7 @@ def replay_motion(name: str, speed: float = 1.0):
     n_replay    = int(total_time * replay_hz / speed)
 
     leap_hand = ExArm(
-        mode="sim",
+        mode=Connection.mode,
         ids=Connection.ids,
         port=Connection.Port,
         baudrate=Connection.baudrate,
