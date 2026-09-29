@@ -491,7 +491,8 @@ class PoseEditorGUI:
     def __init__(self, root):
         self.root         = root
         self.root.title("LEAP Hand Pose Sequencer: Ex-GUI")
-        self.root.geometry("1600x900")
+        self.root.state("zoomed")
+        self.root.tk.call("tk", "scaling", 2.5)
 
         # Core data and control objects
         self.pose_manager       = PoseManager()
