@@ -2,7 +2,7 @@
 """
 LeapHand.py — Low-level Dynamixel driver for the LEAP Hand.
 
-Wraps the Dynamixel SDK GroupSyncWrite / GroupSyncRead protocol to provide
+Wraps the Dynamixel SDK GroupSyncWrite / GroupBulkRead protocol to provide
 a clean, high-level interface for sending joint angle goals and reading back
 position / velocity / current state at high frequency.
 
@@ -15,12 +15,17 @@ before any packet is transmitted.
 
 from dynamixel_sdk import *
 import numpy as np
+import threading
 
 # ------------------------------------------------------------------ #
 # Dynamixel control table addresses (Protocol 2.0)                   #
 # ------------------------------------------------------------------ #
 
 ADDR_TORQUE_ENABLE      = 64   # 1 byte  — enable/disable motor torque
+ADDR_OPERATING_MODE     = 11   # 1 byte  — select motor control mode
+ADDR_GOAL_PWM           = 100  # 2 bytes — PWM output goal
+ADDR_GOAL_CURRENT       = 102  # 2 bytes — current goal / position-mode limit
+ADDR_GOAL_VELOCITY      = 104  # 4 bytes — velocity goal
 ADDR_GOAL_POSITION      = 116  # 4 bytes — target position register
 ADDR_PRESENT_CURRENT    = 126  # 2 bytes — measured motor current
 ADDR_PRESENT_VELOCITY   = 128  # 4 bytes — measured joint velocity
@@ -32,10 +37,32 @@ ADDR_PRESENT_POS_VEL_CUR = 126 # burst-read start address (current→velocity→
 # ------------------------------------------------------------------ #
 
 LEN_GOAL_POSITION       = 4
+LEN_GOAL_PWM            = 2
+LEN_GOAL_CURRENT        = 2
+LEN_GOAL_VELOCITY       = 4
 LEN_PRESENT_CURRENT     = 2
 LEN_PRESENT_VELOCITY    = 4
 LEN_PRESENT_POSITION    = 4
 LEN_PRESENT_POS_VEL_CUR = 10   # current(2) + velocity(4) + position(4)
+
+# XL330 operating modes
+MODE_CURRENT_CONTROL = 0
+MODE_VELOCITY_CONTROL = 1
+MODE_POSITION_CONTROL = 3
+MODE_EXTENDED_POSITION_CONTROL = 4
+MODE_CURRENT_BASED_POSITION_CONTROL = 5
+MODE_PWM_CONTROL = 16
+SUPPORTED_OPERATING_MODES = {
+    MODE_CURRENT_CONTROL,
+    MODE_VELOCITY_CONTROL,
+    MODE_POSITION_CONTROL,
+    MODE_EXTENDED_POSITION_CONTROL,
+    MODE_CURRENT_BASED_POSITION_CONTROL,
+    MODE_PWM_CONTROL,
+}
+
+VELOCITY_RPM_PER_COUNT = 0.229
+PWM_PERCENT_PER_COUNT = 0.113
 
 # ------------------------------------------------------------------ #
 # Unit conversion                                                     #
@@ -52,9 +79,9 @@ DEGREE_TO_POSITION = 1 / 0.087891
 # Logical order: index[0-3], middle[4-7], ring[8-11], thumb[12-15]
 # Physical order on the hand wiring: ring, middle, index, thumb
 LOGICAL_TO_PHYSICAL = np.array([
-    8, 9, 10, 11,    # logical index   → physical slots 8-11
+    0, 1, 2, 3,    # logical index   → physical slots 0-3
     4, 5, 6,  7,     # logical middle  → physical slots 4-7
-    0, 1, 2,  3,     # logical ring    → physical slots 0-3
+    8, 9, 10, 11,    # logical ring    → physical slots 8-11
     12,13,14, 15     # logical thumb   → physical slots 12-15
 ])
 
@@ -83,6 +110,7 @@ class LeapHand:
                    Applied as a bias when converting degrees ↔ raw ticks.
         """
         self.ids = list(ids)
+        self._bus_lock = threading.RLock()
 
         self.portHandler   = PortHandler(port)
         self.packetHandler = PacketHandler(2.0)
@@ -108,20 +136,20 @@ class LeapHand:
         )
 
         # ---------------------------------------------------------- #
-        # Sync Read handler — reads current + velocity + position
-        # from all motors in one burst read (contiguous registers).
+        # Bulk Read handler — reads current + velocity + position
+        # from the contiguous register range on each motor.
         # ---------------------------------------------------------- #
-        self.groupSyncReadState = GroupSyncRead(
+        self.groupBulkReadState = GroupBulkRead(
             self.portHandler,
             self.packetHandler,
-            ADDR_PRESENT_POS_VEL_CUR,
-            LEN_PRESENT_POS_VEL_CUR
         )
 
         for dxl_id in self.ids:
-            if not self.groupSyncReadState.addParam(dxl_id):
+            if not self.groupBulkReadState.addParam(
+                dxl_id, ADDR_PRESENT_POS_VEL_CUR, LEN_PRESENT_POS_VEL_CUR
+            ):
                 raise RuntimeError(
-                    f"Failed to add motor {dxl_id} to SyncRead"
+                    f"Failed to add motor {dxl_id} to BulkRead"
                 )
 
     # ------------------------------------------------------------------ #
@@ -142,13 +170,55 @@ class LeapHand:
             (value >> 24) & 0xFF,
         ]
 
+    @staticmethod
+    def signed_int_to_bytes(value, data_length):
+        """Encode a signed integer in little-endian two's-complement form."""
+        value = int(value)
+        bit_count = data_length * 8
+        minimum = -(1 << (bit_count - 1))
+        maximum = (1 << (bit_count - 1)) - 1
+        if not minimum <= value <= maximum:
+            raise ValueError(
+                f"{value} does not fit in a signed {bit_count}-bit register"
+            )
+        return [(value >> (8 * index)) & 0xFF for index in range(data_length)]
+
+    def _logical_joint_values(self, values, name):
+        values = np.asarray(values, dtype=float)
+        if values.shape != (len(self.ids),):
+            raise ValueError(f"{name} must contain {len(self.ids)} values")
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"{name} must contain only finite values")
+        return values[LOGICAL_TO_PHYSICAL]
+
+    def _sync_write_register(self, address, data_length, physical_values):
+        with self._bus_lock:
+            sync = GroupSyncWrite(
+                self.portHandler,
+                self.packetHandler,
+                address,
+                data_length,
+            )
+            try:
+                for dxl_id, value in zip(self.ids, physical_values):
+                    param = self.signed_int_to_bytes(value, data_length)
+                    if not sync.addParam(dxl_id, param):
+                        raise RuntimeError(f"Failed to add motor {dxl_id}")
+
+                result = sync.txPacket()
+                if result != COMM_SUCCESS:
+                    raise RuntimeError(self.packetHandler.getTxRxResult(result))
+            finally:
+                sync.clearParam()
+
     # ------------------------------------------------------------------ #
     # Port management                                                      #
     # ------------------------------------------------------------------ #
 
     def close_port(self):
         """Close the USB serial port gracefully."""
-        self.portHandler.closePort()
+        with self._bus_lock:
+            self.portHandler.closePort()
 
     # ------------------------------------------------------------------ #
     # Torque control                                                       #
@@ -162,19 +232,48 @@ class LeapHand:
         ----------
         enable : bool — True to energise, False to release.
         """
-        sync  = GroupSyncWrite(
-            self.portHandler,
-            self.packetHandler,
-            ADDR_TORQUE_ENABLE,
-            1
-        )
-        value = [1 if enable else 0]
+        with self._bus_lock:
+            sync  = GroupSyncWrite(
+                self.portHandler,
+                self.packetHandler,
+                ADDR_TORQUE_ENABLE,
+                1
+            )
+            value = [1 if enable else 0]
 
-        for dxl_id in self.ids:
-            sync.addParam(dxl_id, value)
+            try:
+                for dxl_id in self.ids:
+                    if not sync.addParam(dxl_id, value):
+                        raise RuntimeError(f"Failed to add motor {dxl_id} for torque control")
 
-        sync.txPacket()
-        sync.clearParam()
+                result = sync.txPacket()
+                if result != COMM_SUCCESS:
+                    raise RuntimeError(self.packetHandler.getTxRxResult(result))
+            finally:
+                sync.clearParam()
+
+    def set_operating_mode(self, mode):
+        """Set an XL330 operating mode; torque is disabled and left off."""
+        try:
+            mode = int(mode)
+        except (TypeError, ValueError) as error:
+            raise ValueError("mode must be a supported integer operating mode") from error
+        if mode not in SUPPORTED_OPERATING_MODES:
+            raise ValueError(
+                f"Unsupported XL330 mode {mode}; expected one of "
+                f"{sorted(SUPPORTED_OPERATING_MODES)}"
+            )
+
+        with self._bus_lock:
+            self.set_torque_enabled(False)
+            for dxl_id in self.ids:
+                result, error = self.packetHandler.write1ByteTxRx(
+                    self.portHandler, dxl_id, ADDR_OPERATING_MODE, mode
+                )
+                if result != COMM_SUCCESS:
+                    raise RuntimeError(self.packetHandler.getTxRxResult(result))
+                if error != 0:
+                    raise RuntimeError(self.packetHandler.getRxPacketError(error))
 
     # ------------------------------------------------------------------ #
     # Goal position                                                        #
@@ -197,33 +296,85 @@ class LeapHand:
         """
         positions = np.asarray(positions)
 
+        if len(positions) != len(self.ids):
+                    raise ValueError(
+                        f"Expected {len(self.ids)} positions, got {len(positions)}"
+                    )
+
         # Remap from logical → physical ordering
         positions = positions[LOGICAL_TO_PHYSICAL]
 
-        if len(positions) != len(self.ids):
-            raise ValueError(
-                f"Expected {len(self.ids)} positions, got {len(positions)}"
-            )
+        with self._bus_lock:
+            self.groupSyncWritePos.clearParam()
 
-        self.groupSyncWritePos.clearParam()
+            for dxl_id, position_deg in zip(self.ids, positions):
+                # Convert degree → raw tick, applying per-joint offset and 180° bias
+                # (Dynamixel zero position corresponds to 180° in our convention)
+                raw_position = int(
+                    (position_deg + self.offsets[self.ids.index(dxl_id)] + 180)
+                    * DEGREE_TO_POSITION
+                )
 
-        for dxl_id, position_deg in zip(self.ids, positions):
-            # Convert degree → raw tick, applying per-joint offset and 180° bias
-            # (Dynamixel zero position corresponds to 180° in our convention)
-            raw_position = int(
-                (position_deg + self.offsets[self.ids.index(dxl_id)] + 180)
-                * DEGREE_TO_POSITION
-            )
+                param = self.int32_to_bytes(raw_position)
 
-            param = self.int32_to_bytes(raw_position)
+                if not self.groupSyncWritePos.addParam(dxl_id, param):
+                    raise RuntimeError(f"Failed to add motor {dxl_id}")
 
-            if not self.groupSyncWritePos.addParam(dxl_id, param):
-                raise RuntimeError(f"Failed to add motor {dxl_id}")
+            result = self.groupSyncWritePos.txPacket()
 
-        result = self.groupSyncWritePos.txPacket()
+            if result != COMM_SUCCESS:
+                raise RuntimeError(self.packetHandler.getTxRxResult(result))
 
-        if result != COMM_SUCCESS:
-            raise RuntimeError(self.packetHandler.getTxRxResult(result))
+    def set_goal_currents(self, currents_ma):
+        """Set current goals/limits in mA (Current or Current-based Position mode)."""
+        currents = self._logical_joint_values(currents_ma, "currents_ma")
+        self._sync_write_register(
+            ADDR_GOAL_CURRENT,
+            LEN_GOAL_CURRENT,
+            np.rint(currents).astype(np.int64),
+        )
+
+    def set_goal_velocities_rpm(self, velocities_rpm):
+        """Set signed velocity goals in RPM (Velocity Control mode)."""
+        velocities = self._logical_joint_values(velocities_rpm, "velocities_rpm")
+        raw_values = np.rint(velocities / VELOCITY_RPM_PER_COUNT).astype(np.int64)
+        self._sync_write_register(
+            ADDR_GOAL_VELOCITY, LEN_GOAL_VELOCITY, raw_values
+        )
+
+    def set_goal_pwm_percent(self, pwm_percent):
+        """Set signed PWM goals as percentages from -100 to 100 (PWM mode)."""
+        pwm = self._logical_joint_values(pwm_percent, "pwm_percent")
+        if np.any(np.abs(pwm) > 100):
+            raise ValueError("pwm_percent values must be between -100 and 100")
+        raw_values = np.rint(pwm / PWM_PERCENT_PER_COUNT).astype(np.int64)
+        self._sync_write_register(ADDR_GOAL_PWM, LEN_GOAL_PWM, raw_values)
+
+    def set_goal_positions_current_based(self, positions_deg, current_limits_ma):
+        """Set degree goals and current limits in Current-based Position mode."""
+        self._logical_joint_values(positions_deg, "positions_deg")
+        self._logical_joint_values(current_limits_ma, "current_limits_ma")
+        self.set_goal_currents(current_limits_ma)
+        self.set_goal_positions_degree(positions_deg)
+
+    def set_goal_positions_pulses(self, positions_pulses):
+        """Set signed raw position targets for extended/current-based position mode."""
+        positions = self._logical_joint_values(positions_pulses, "positions_pulses")
+        raw_values = np.rint(positions).astype(np.int64)
+        if np.any(np.abs(raw_values) > 1_048_575):
+            raise ValueError("position pulse targets must be within +/-1,048,575")
+        self._sync_write_register(
+            ADDR_GOAL_POSITION, LEN_GOAL_POSITION, raw_values
+        )
+
+    def set_goal_positions_current_based_pulses(
+        self, positions_pulses, current_limits_ma
+    ):
+        """Set raw pulse targets and current limits in Current-based Position mode."""
+        self._logical_joint_values(positions_pulses, "positions_pulses")
+        self._logical_joint_values(current_limits_ma, "current_limits_ma")
+        self.set_goal_currents(current_limits_ma)
+        self.set_goal_positions_pulses(positions_pulses)
 
     # ------------------------------------------------------------------ #
     # State reading                                                        #
@@ -237,38 +388,55 @@ class LeapHand:
         -------
         positions  : (16,) float ndarray — joint angles in degrees, *logical* order.
         velocities : (16,) int   ndarray — raw velocity counts, *logical* order.
-        currents   : (16,) int   ndarray — raw current counts,  *logical* order.
+        currents   : (16,) int   ndarray — signed current register values in
+                             *logical* order (mA on XL330).
 
-        Returns ([0,0,0]) on communication failure to avoid crashing callers.
+        Returns [] on communication failure.
         """
-        result = self.groupSyncReadState.txRxPacket()
+        with self._bus_lock:
+            result = self.groupBulkReadState.txRxPacket()
 
-        if result != COMM_SUCCESS:
-            return [0, 0, 0]
+            if result != COMM_SUCCESS:
+                return []
 
-        positions  = []
-        velocities = []
-        currents   = []
+            if not all(
+                self.groupBulkReadState.isAvailable(
+                    dxl_id, ADDR_PRESENT_POS_VEL_CUR, LEN_PRESENT_POS_VEL_CUR
+                )
+                for dxl_id in self.ids
+            ):
+                return []
 
-        for dxl_id in self.ids:
+            positions  = []
+            velocities = []
+            currents   = []
 
-            current = self.groupSyncReadState.getData(
-                dxl_id, ADDR_PRESENT_CURRENT, LEN_PRESENT_CURRENT
-            )
-            velocity = self.groupSyncReadState.getData(
-                dxl_id, ADDR_PRESENT_VELOCITY, LEN_PRESENT_VELOCITY
-            )
-            position = self.groupSyncReadState.getData(
-                dxl_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
-            )
+            for physical_index, dxl_id in enumerate(self.ids):
+                current = self.groupBulkReadState.getData(
+                    dxl_id, ADDR_PRESENT_CURRENT, LEN_PRESENT_CURRENT
+                )
+                velocity = self.groupBulkReadState.getData(
+                    dxl_id, ADDR_PRESENT_VELOCITY, LEN_PRESENT_VELOCITY
+                )
+                position = self.groupBulkReadState.getData(
+                    dxl_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
+                )
 
-            # Convert raw ticks back to degrees, removing the per-joint offset
-            positions.append(
-                (position - self.offsets[list(self.ids).index(dxl_id)])
-                / DEGREE_TO_POSITION
-            )
-            velocities.append(velocity)
-            currents.append(current)
+                if current >= 1 << 15:
+                    current -= 1 << 16
+                if velocity >= 1 << 31:
+                    velocity -= 1 << 32
+                if position >= 1 << 31:
+                    position -= 1 << 32
+
+                # Invert the 180-degree bias and offset applied when commanding.
+                positions.append(
+                    position / DEGREE_TO_POSITION
+                    - self.offsets[physical_index]
+                    - 180
+                )
+                velocities.append(velocity)
+                currents.append(current)
 
         # Reorder from physical → logical so callers always see logical ordering
         positions  = np.array(positions)[PHYSICAL_TO_LOGICAL]

@@ -1,3 +1,7 @@
+import _thread
+
+from pynput import keyboard
+
 from utils.LeapHand import LeapHand
 from utils.SimHand import SimHand
 
@@ -60,6 +64,20 @@ class ExArm:
                 model_path=model_path
             )
 
+        self._spacebar_listener = keyboard.Listener(on_press=self._on_key_press)
+        self._spacebar_listener.start()
+
+    def _on_key_press(self, key):
+        """Disable motor torque and interrupt the main program on spacebar."""
+        if key == keyboard.Key.space:
+            try:
+                self.set_torque_enabled(False)
+            except Exception as error:
+                print(f"Failed to disable motor torque: {error}")
+            finally:
+                _thread.interrupt_main()
+            return False
+
     # ------------------------------------------------------------------ #
     # Explicit backend accessors                                           #
     # ------------------------------------------------------------------ #
@@ -121,6 +139,8 @@ class ExArm:
 
     def close(self):
         """Gracefully shut down all active backends (close port / viewer)."""
+        self._spacebar_listener.stop()
+
         if self.real and hasattr(self.real, "close_port"):
             self.real.close_port()
 

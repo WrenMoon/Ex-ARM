@@ -52,7 +52,7 @@ This suite provides hardware abstraction, MuJoCo simulation, analytical kinemati
 python 3.11 or 3.10
 
 ```bash
-pip install dynamixel-sdk numpy scipy mujoco opencv-python mediapipe pygame
+pip install dynamixel-sdk numpy scipy mujoco opencv-python mediapipe pygame pynput
 ```
 
 
@@ -112,6 +112,10 @@ hand.set_goal_positions_degree(np.zeros(16))
 state = hand.get_state()   # returns {"real": ..., "sim": ...} in "both" mode
 hand.close()
 ```
+
+While an `ExArm` instance is active, pressing the spacebar disables torque and
+raises `KeyboardInterrupt` in the main thread. Allow it to propagate (or handle
+it in a `finally` block) so the program exits and can clean up its resources.
 
 ---
 
