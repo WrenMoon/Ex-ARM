@@ -1,0 +1,220 @@
+\documentclass[authoryear,journal,12pt]{elsarticle}
+
+\usepackage{graphicx,natbib,amssymb,lineno}
+\usepackage{amsmath}
+\usepackage{amsbsy,amsfonts}
+\usepackage{bm}
+\usepackage{epsfig}
+\usepackage{soul}
+\usepackage[normalem]{ulem}
+\usepackage{booktabs}
+\usepackage{array,multirow}
+\usepackage[percent]{overpic}
+\usepackage{epstopdf}
+\usepackage{hyperref}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Active Perception of Object Shape Using a Sensorless Dexterous Robotic Hand}
+
+\author[sch]{G.~Sai~Pranav}
+\author[iitgn]{Prof.~Harish J.~Palanthandalam-Madapusi}
+
+\begin{abstract}
+
+Robots commonly rely on cameras, depth sensors, or dedicated tactile sensors
+to identify and understand objects. In this project, we investigate whether
+a dexterous robotic hand can identify an object's shape and estimate its
+dimensions using proprioceptive information obtained through physical
+interaction, without relying on external visual or dedicated tactile
+sensing.
+
+We use a LEAP Hand to interact with two geometric objects: a cube with a
+side length of 7.5~cm and a sphere with a diameter of 7.5~cm. The hand
+performs controlled exploratory movements while we record proprioceptive
+information such as joint states, motor positions, finger trajectories,
+and, where applicable, motor currents. These observations provide indirect
+information about the object's geometry through the way the fingers move
+and interact with its surface.
+
+We follow an active perception approach in which manipulation is treated as
+a source of information. Rather than making a decision from a single grasp,
+the hand explores the object through successive interactions and uses the
+resulting observations to construct an initial internal representation. As
+manipulation continues, new contacts generated through movements such as
+rotation, sliding, pivoting, or regrasping provide additional information
+that can be used to refine this representation. We then identify the object
+as a cube or a sphere and estimate its corresponding physical dimension.
+
+\end{abstract}
+
+
+\end{frontmatter}
+
+\textbf{Keywords:} Active perception, dexterous manipulation, proprioception,
+robotic hand, object shape recognition, LEAP Hand, proprioceptive perception.
+
+\clearpage
+
+\renewcommand{\baselinestretch}{1.0}
+\section{Introduction}
+\label{sec:intro}
+
+Understanding an unfamiliar object is an important capability for a robot
+that needs to interact with its surroundings. Humans can often infer an
+object's approximate shape and size through physical interaction by moving
+their fingers, changing their grasp, and observing how the object responds,
+even when visual information is unavailable. This raises the possibility
+that a robotic hand could similarly obtain information about an object
+through its own movements and interactions.
+
+Dexterous robotic hands provide a suitable platform for investigating this
+idea. Their multiple fingers and joints generate proprioceptive information
+about the configuration and movement of the hand. When the fingers interact
+with an object, these measurements can indirectly reflect characteristics
+of its geometry.
+
+Previous studies have demonstrated the potential of proprioception for
+object recognition. V'asquez and Perdereau developed a proprioceptive
+shape signature based on joint angles to recognize primitive object shapes
+and estimate object pose. Their representation was designed to be invariant
+to object size and position \citep{VasquezPerdereau2017}. Sintov and Meir
+subsequently demonstrated object recognition using the kinematics of a
+multi-fingered robotic hand without relying on visual or tactile sensing,
+including recognition of broader geometric categories
+\citep{SintovMeir2023}.
+
+These studies establish that proprioceptive information can provide useful
+information about object geometry. However, their primary focus is on
+recognizing object shapes or categories, rather than estimating the
+physical dimensions of the object as an output. The present project builds
+on this direction by investigating whether proprioceptive interaction can
+be used for both shape identification and dimensional estimation.
+
+In the present study, we investigate whether a dexterous robotic hand can
+identify an object as a cube or sphere and estimate its physical dimension
+using proprioceptive information obtained through active physical
+interaction, without external visual or dedicated tactile sensing. We use
+a LEAP Hand and two geometric objects: a cube with a side length of 7.5~cm
+and a sphere with a diameter of 7.5~cm. Their known dimensions provide ground
+truth against which the estimated dimensions can be evaluated.
+
+
+\section{Data and Methods}
+\label{sec:methods}
+
+\subsection{Experimental Setup}
+
+The experiments were conducted using a LEAP Hand, an open-source
+dexterous robotic hand with four fingers and 16 actuated joints. The
+index, middle, and ring fingers each have four joints, while the thumb has
+four joints comprising base rotation and flexion-related movements. The
+hand provides proprioceptive information about its joint configuration
+during physical interaction with an object.
+
+Two geometric objects were used in the experiments: a cube with a side
+length of 7.5~cm and a sphere with a diameter of 7.5~cm. The known
+dimensions of these objects provide ground-truth values for evaluating
+the estimated dimensions.
+
+The hand was operated using the Ex-ARM Python control framework developed
+for the LEAP Hand. The framework provides an interface for hardware
+control and includes a kinematic model for calculating fingertip
+positions from the joint configuration. The hardware interface provides
+access to joint positions, velocities, and motor currents, while the
+kinematic model provides forward kinematics for the four fingertips.
+
+\subsection{Proprioceptive Data}
+\label{sec:proprioceptive_data}
+
+The perception process relies on information obtained from the robotic
+hand itself rather than from external cameras, depth sensors, or dedicated
+tactile sensors. During physical interaction, the configuration of the
+fingers changes according to the geometry of the contacted surface. These
+changes provide indirect information about the shape and dimensions of
+the object.
+
+The primary proprioceptive measurements consist of joint states obtained
+from the LEAP Hand. Motor-current measurements are also used to identify
+changes associated with physical contact. Since motor current is not a
+dedicated tactile measurement, it is treated as a contact proxy rather
+than as a direct measurement of contact force.
+
+The recorded joint positions are supplied to the LEAP Hand forward
+kinematic model to determine the corresponding fingertip positions in the
+hand coordinate frame. The resulting fingertip locations provide spatial
+observations of the object surface during interaction.
+
+\subsection{Active Physical Exploration}
+\label{sec:active_exploration}
+
+The object is explored through a sequence of physical interactions rather
+than through a single static grasp. The fingers are moved towards the
+object and contact is identified from changes in the proprioceptive state.
+For each detected contact, the corresponding joint configuration is used
+to determine the fingertip position through forward kinematics.
+
+The hand and object are maintained in a fixed relative configuration
+during individual probing operations, and the hand is released between
+successive contacts. This allows contact observations to be collected
+from different probing configurations while maintaining a common
+reference frame.
+
+Each new contact provides an additional observation of the object's
+surface. Consequently, the geometric representation is progressively
+constructed from multiple contact locations. Movements that change the
+contact configuration can expose different portions of the object and
+provide additional information for perception.
+
+This approach treats manipulation as part of the perception process.
+Instead of separating perception from manipulation, the physical
+interaction itself provides the observations from which the object's
+geometry can be inferred.
+
+\subsection{Object Shape Identification}
+\label{sec:shape_identification}
+
+The collected proprioceptive observations are used to distinguish between
+the two object geometries. The fingertip contact locations obtained from
+the hand's joint states provide a spatial representation of the contacted
+surface.
+
+For the sphere, contact locations are expected to follow the curved
+surface of the object, whereas contacts with the cube are associated with
+its planar faces and edges. The spatial distribution of the contact
+observations is therefore used to distinguish the two geometric classes.
+
+The Ex-ARM implementation includes an experimental proprioceptive
+shape-recognition procedure based on LEAP joint states and motor-current
+changes for distinguishing sphere-like and box-like objects. Contact
+samples are generated from the measured joint positions using the LEAP
+Hand forward-kinematics model.
+
+\subsection{Dimensional Estimation}
+\label{sec:dimension_estimation}
+
+Following shape identification, the proprioceptive contact observations
+are used to estimate the corresponding physical dimension of the object.
+For the cube, the characteristic dimension is its side length, while for
+the sphere it is its diameter.
+
+The estimated dimension is obtained from the spatial information provided
+by the successive contact observations and is compared with the known
+ground-truth dimension of 7.5~cm. This provides a direct measure of how
+well proprioceptive interaction can recover the physical scale of the
+object without external visual or dedicated tactile sensing.
+
+The complete implementation used in this study is publicly available in
+the Ex-ARM GitHub repository \citep{ExARM}.
+
+\section{Results}
+\label{sec:results}
+
+\clearpage
+
+\bibliographystyle{elsart-harv}
+\bibliography{manuscript}
+
+\end{document}
