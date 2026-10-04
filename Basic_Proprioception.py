@@ -27,11 +27,11 @@ grip = dict(
     step_sizes=[-1, 1, 1, 1,
                 1, 1, 1, 1,
                 1, 1, 1, 1,
-                1, 1, 1, 1],
-    max_currents= [40, 40, 40, 40,
-                   40, 40, 40, 40,
-                   40, 40, 40, 40,
-                   40, 40, 40, 40],
+                1, -1, 1, 1],
+    max_currents= [22, 80, 25, 20,
+                   22, 80, 25, 20,
+                   22, 80, 25, 20,
+                   25, 70, 25, 20],
     reached_target=[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
 )
 
@@ -53,7 +53,7 @@ while not EndLoop:
     state = leap_hand.get_state()
     real_state = state.get("real") if isinstance(state, dict) else state
     if not isinstance(real_state, (tuple, list)) or len(real_state) != 3:
-        # print("Unable to read real hand state; skipping this step.")
+        print("Unable to read real hand state; skipping this step.")
         time.sleep(0.5)
         continue
     
@@ -66,24 +66,40 @@ while not EndLoop:
     leap_hand.set_goal_positions_degree(current_positions)
 
     for i in range(16):
-        # if not grip["reached_target"][i]:
-            if abs(currents[i]) > grip["max_currents"][i]:
-                grip["max_currents"][i] = abs(currents[i])
-                print(f"Current limit exceeded on joint {i}: {currents[i]} mA")
-                print(grip["max_currents"])
-                # grip["reached_target"][i] = True
-                # current_positions[i] = positions[i]  # Reset to current position
-            elif current_positions[i] < grip["max_angles"][i]:
-                current_positions[i] += grip["step_sizes"][i]
-            elif current_positions[i] > grip["max_angles"][i]:
-                current_positions[i] = grip["max_angles"][i]
-        # elif current_positions[i] > grip["max_angles"][i]:
-        #     current_positions[i] = grip["max_angles"][i]
+        if not grip["reached_target"][i]:
+            if grip["step_sizes"][i] >= 0:
+                if currents[i] > grip["max_currents"][i]:
+                    grip["max_currents"][i] = currents[i]
+                    print(f"Current limit exceeded on joint {i}: {currents[i]} mA")
+                    print(grip["max_currents"])
+                    grip["reached_target"][i] = True
+                elif current_positions[i] < grip["max_angles"][i]:
+                    current_positions[i] += grip["step_sizes"][i]
+                if current_positions[i] > grip["max_angles"][i]:
+                    current_positions[i] = grip["max_angles"][i]
+                    grip["reached_target"][i] = True
+            else:
+                if currents[i] < -grip["max_currents"][i]:
+                    grip["max_currents"][i] = -currents[i]
+                    print(f"Current limit exceeded on joint {i}: {currents[i]} mA")
+                    print(grip["max_currents"])
+                    grip["reached_target"][i] = True
+                elif current_positions[i] > grip["max_angles"][i]:
+                    current_positions[i] += grip["step_sizes"][i]
+                if current_positions[i] < grip["max_angles"][i]:
+                    current_positions[i] = grip["max_angles"][i]
+                    grip["reached_target"][i] = True
+        if abs(grip["max_angles"][i] - current_positions[i]) < 1:
+            grip["reached_target"][i] = True
 
-    if grip["reached_target"] == True:
+        
+    if all(grip["reached_target"]):
         EndLoop = True
+        print("Grasp Completed")
+
+    print(grip["reached_target"])
 
     
 
-    time.sleep(0.1)
+    time.sleep(0.2)
 
