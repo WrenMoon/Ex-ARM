@@ -4,9 +4,8 @@ from utils.Constants import Connection
 from utils.ExARM import ExArm
 import time
 
-
 leap_hand = ExArm(
-        mode="both",
+        mode=Connection.mode,
         ids=Connection.ids,
         port=Connection.Port,
         baudrate=Connection.baudrate,
@@ -14,61 +13,59 @@ leap_hand = ExArm(
         model_path="Data/mujoco_robot.urdf"
     )
 
+grip = dict(
+    start_angles=[0, 0, 0, 0,
+                  0, 0, 0, 0,
+                  0, 0, 0, 0,
+                  0, 0, 0, 0],
+    max_angles=[-75, 90, 90, 60,
+                0, 80, 80, 65,
+                75, 90, 90, 60,
+                0, 100, 110, 80],
+    step_sizes=[-1, 1, 1, 1,
+                1, 1, 1, 1,
+                1, 1, 1, 1,
+                1, 1, 1, 1],
+    max_currents= 40
+)
+
+current_positions = grip["start_angles"]
 leap_hand.set_torque_enabled(True)
 
-grip1 = dict(
-    index=[-60.0, 65.0, 60.0, 70.0],
-    middle=[0.0, 70.0, 15.0, 60.0],
-    ring=[60.0, 65.0, 60.0, 70.0],
-    thumb=[5.0, 130.0, 85.0, 75.0],
-)
+print("\033[2J\033[H", end="")
 
-pose = np.array(
-    grip1["index"] + grip1["middle"] + grip1["ring"] + grip1["thumb"],
-    dtype=float,
-)
-
-current_limit = 40  # XL330 Present Current is reported in mA.
-endLoop = False
-
-while not endLoop:
-    # leap_hand.set_goal_positions_degree([0, i, i, i, 0, i, i, i, 
-    #                                       0, i, i, i, 0, 0, 0, 0])
-    leap_hand.set_goal_positions_degree(pose)
-    # leap_hand.set_goal_positions_degree(np.zeros(16))
+while True:
     state = leap_hand.get_state()
     real_state = state.get("real") if isinstance(state, dict) else state
     if not isinstance(real_state, (tuple, list)) or len(real_state) != 3:
         print("Unable to read real hand state; skipping this step.")
         time.sleep(0.5)
         continue
-
-    positions, velocities, currents = real_state
-    print("Currents (mA):", currents)
-
-    if abs(currents[2]) < current_limit:
-        pose[2] += 1.0
-    else:
-        print("Current limit exceeded on joint 2, stopping increment.")
-
-    if abs(currents[6]) < current_limit:
-        pose[6] += 1.0
-    else:
-        print("Current limit exceeded on joint 6, stopping increment.")
-
-    if abs(currents[10]) < current_limit:
-        pose[10] += 1.0
-    else:
-        print("Current limit exceeded on joint 10, stopping increment.")
-
-    if abs(currents[13]) < current_limit:
-        pose[13] -= 1.0
-    else:
-        print("Current limit exceeded on joint 13, stopping decrement.")
-
-    if abs(currents[2]) > current_limit and abs(currents[6]) > current_limit and abs(currents[10]) > current_limit and abs(currents[13]) > current_limit:
-        print("Grasp Completed")
-        endLoop = True
-        
     
-    time.sleep(0.5)
+    positions, velocities, currents = real_state
+
+    print("\033[H", end="")
+    print("────────────────────────────────────────")
+    for i in range(4):
+        print("│", end="")
+        for j in range(4):
+            print(f"{current_positions[i * 4 + j]:8.3f} │", end="")
+        print()
+        if i < 3:
+            print("────────────────────────────────────────")
+    print("────────────────────────────────────────")
+
+
+    for i in range(16):
+        if abs(currents[i]) > grip["max_currents"]:
+            print(f"Current limit exceeded on joint {i}: {currents[i]} mA")
+            current_positions[i] = positions[i]  # Reset to current position
+        elif current_positions[i] < grip["max_angles"][i]:
+            current_positions[i] += grip["step_sizes"][i]
+        elif current_positions[i] > grip["max_angles"][i]:
+            current_positions[i] = grip["max_angles"][i]
+
+    leap_hand.set_goal_positions_degree(current_positions)
+    
+
+    time.sleep(0.01)
