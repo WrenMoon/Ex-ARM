@@ -60,7 +60,7 @@ def build(source, output_dir, names, threshold, max_parts):
                 vertices, faces = read_stl(path)
                 print(f"Decomposing {path.name}...", flush=True)
                 parts = coacd.run_coacd(coacd.Mesh(vertices, faces), threshold=threshold,
-                                        max_convex_hull=max_parts, preprocess_mode="auto",
+                                        max_convex_hull=max_parts, preprocess_mode="off",
                                         resolution=1000, mcts_nodes=10, mcts_iterations=30,
                                         mcts_max_depth=3, seed=0)
                 if not parts:
@@ -69,6 +69,8 @@ def build(source, output_dir, names, threshold, max_parts):
                 for index, (points, triangles) in enumerate(parts):
                     if not np.isfinite(points).all():
                         raise ValueError("Decomposition returned nonfinite coordinates")
+                    if np.any(points.min(axis=0) < vertices.min(axis=0) - 1e-8) or np.any(points.max(axis=0) > vertices.max(axis=0) + 1e-8):
+                        raise ValueError(f"Decomposition expands outside source bounds: {path.name}, part {index}")
                     piece = output_dir / f"{path.stem}_part_{index:03d}.obj"
                     lines = [f"v {x:.17g} {y:.17g} {z:.17g}\n" for x, y, z in points]
                     lines += [f"f {a + 1} {b + 1} {c + 1}\n" for a, b, c in triangles]
@@ -88,8 +90,10 @@ def build(source, output_dir, names, threshold, max_parts):
     tree.write(output, encoding="unicode")
     report = {"source_urdf": str(source), "output_urdf": str(output),
               "threshold": threshold, "max_parts": max_parts, "seed": 0, "meshes": manifest,
+              "preprocess_mode": "off",
               "limitations": ["Approximate convex decomposition; not certified conservative or exact",
-                              "Preprocessing can alter cavities and repair mesh defects",
+                              "Preprocessing is disabled; source topology defects are not repaired",
+                              "Preserved coordinate bounds do not guarantee preservation of concave interfaces",
                               "Unselected collision meshes retain their original convex hull approximation",
                               "New geometry requires fresh path validation and reference measurements"]}
     (output_dir / "manifest.json").write_text(json.dumps(report, indent=2))

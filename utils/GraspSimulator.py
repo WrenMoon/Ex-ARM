@@ -121,7 +121,7 @@ class GraspSimulator:
                                  if i != self.object_geom_id
                                  and int(self.model.geom_bodyid[i]) not in self.finger_bodies]
         self.set_angles(np.zeros(16))
-        self.baseline_self_pairs = self.self_collision_pairs()
+        self.baseline_self_depths = self._collision_depths()
         if self.enable_viewer:
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
@@ -153,10 +153,52 @@ class GraspSimulator:
     def get_angles(self):
         return np.degrees(self.data.qpos[self.qpos_ids]).copy()
 
+    def _collision_depths(self):
+        depths = {}
+        for c in self.data.contact:
+            if c.dist < -1e-6 and self.object_geom_id not in (c.geom1, c.geom2):
+                pair = tuple(sorted((int(c.geom1), int(c.geom2))))
+                depth = -float(c.dist)
+                depths[pair] = max(depths.get(pair, 0), depth)
+        return depths
+
     def self_collision_pairs(self):
         return {tuple(sorted((int(c.geom1), int(c.geom2))))
                 for c in self.data.contact if c.dist < -1e-6
                 and self.object_geom_id not in (c.geom1, c.geom2)}
+
+    def fixed_object_distances(self):
+        object_id = self.object_geom_id
+        rotation = self.data.geom_xmat[object_id].reshape(3, 3)
+        bounds = self.model.geom_aabb[object_id]
+        center = self.data.geom_xpos[object_id] + rotation @ bounds[:3]
+        extent = np.abs(rotation) @ bounds[3:]
+        object_low, object_high = center - extent, center + extent
+        distances = {}
+        if not hasattr(self, '_fixed_bounds_cache'):
+            self._fixed_bounds_cache = {}
+        for geom in self.fixed_hand_geoms:
+            rotation = self.data.geom_xmat[geom].reshape(3, 3)
+            if self.model.geom_type[geom] == mujoco.mjtGeom.mjGEOM_MESH:
+                mesh = int(self.model.geom_dataid[geom])
+                start = int(self.model.mesh_vertadr[mesh])
+                count = int(self.model.mesh_vertnum[mesh])
+                transform = (rotation.tobytes(), self.data.geom_xpos[geom].tobytes())
+                cached = self._fixed_bounds_cache.get(geom)
+                if cached is None or cached[0] != transform:
+                    points = self.model.mesh_vert[start:start + count] @ rotation.T + self.data.geom_xpos[geom]
+                    cached = (transform, points.min(axis=0), points.max(axis=0))
+                    self._fixed_bounds_cache[geom] = cached
+                _, low, high = cached
+            else:
+                bounds = self.model.geom_aabb[geom]
+                center = self.data.geom_xpos[geom] + rotation @ bounds[:3]
+                extent = np.abs(rotation) @ bounds[3:]
+                low, high = center - extent, center + extent
+            gap = max(float(np.max(low - object_high)), float(np.max(object_low - high)))
+            distances[geom] = gap if gap > 0 else mujoco.mj_geomDistance(
+                self.model, self.data, geom, object_id, 0.001, None)
+        return distances
 
     def contact_fingers(self):
         fingers = set()
@@ -165,14 +207,24 @@ class GraspSimulator:
                 continue
             other = contact.geom2 if contact.geom1 == self.object_geom_id else contact.geom1
             fingers.add(self.finger_bodies.get(int(self.model.geom_bodyid[other]), -1))
-        if any(mujoco.mj_geomDistance(self.model, self.data, geom, self.object_geom_id,
-                                     0.001, None) <= 0 for geom in self.fixed_hand_geoms):
+        if any(distance <= 0 for distance in self.fixed_object_distances().values()):
             fingers.add(-1)
         return fingers
 
     def check_self_collision(self):
-        if self.self_collision_pairs() - self.baseline_self_pairs:
-            raise ValueError("New hand self-collision along probe path")
+        current_depths = self._collision_depths()
+        epsilon = 1e-6
+        for pair, current_depth in current_depths.items():
+            geom1, geom2 = pair
+            body1 = int(self.model.geom_bodyid[geom1])
+            body2 = int(self.model.geom_bodyid[geom2])
+            if body1 == body2:
+                continue
+            baseline_depth = self.baseline_self_depths.get(pair, 0)
+            if baseline_depth == 0:
+                raise ValueError("New hand self-collision along probe path")
+            if current_depth > baseline_depth + epsilon:
+                raise ValueError("Hand self-collision deepening beyond tolerance")
 
     def execute_probe(
         self,
@@ -266,6 +318,7 @@ class GraspSimulator:
         for _ in range(20):
             middle = (clear + blocked) / 2
             self.set_angles(middle)
+            self.check_self_collision()
             if self.contact_fingers():
                 blocked = middle
             else:

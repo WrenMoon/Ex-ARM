@@ -74,7 +74,7 @@ def probe_object(
             result_dict = {
                 "joint_status": probe_result.joint_status,
                 "returned_angles": returned_angles.tolist(),
-                "baseline_self_collision_pairs": sorted(sim.baseline_self_pairs),
+                "baseline_self_collision_pairs": sorted([list(p) for p in sim.baseline_self_depths.keys()]),
                 "grasp_index": i,
                 "joint_index": grasp_spec.joint_index,
                 "contact_detected": probe_result.contact_detected,

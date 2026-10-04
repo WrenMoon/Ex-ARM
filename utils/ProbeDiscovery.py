@@ -338,7 +338,7 @@ class ProbeDiscovery:
                             "Existing baseline self-collision pairs are tolerated by the simulator",
                             "Greedy fixed-count selection is not guaranteed globally optimal"],
             "baseline_self_collision_pairs": {
-                obj: [list(pair) for pair in sorted(sim.baseline_self_pairs)]
+                obj: [list(pair) for pair in sorted(sim.baseline_self_depths.keys())]
                 for obj, sim in self.object_sims.items()
             },
         }
