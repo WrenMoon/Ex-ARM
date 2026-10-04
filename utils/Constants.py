@@ -1,5 +1,5 @@
 class Connection:
-    mode = "both"
+    mode = "sim"
     # Port = "/dev/cu.usbserial-FTBEQQVR"
     Port = "COM3"
     baudrate = 4000000
@@ -7,4 +7,4 @@ class Connection:
              8, 9, 10, 11, 12, 13, 14, 15]
     offsets=[0, 0, 0, 0, 0, 0, 0, 0,
                  0,  0,  0, 0, 0, 0, 0, 0]
-    
+    model_path="Data/Leap_Model/mujoco_robot.urdf"

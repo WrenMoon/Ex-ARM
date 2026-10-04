@@ -233,7 +233,7 @@ class RobotController:
                 port=Connection.Port,
                 baudrate=Connection.baudrate,
                 offsets=Connection.offsets,
-                model_path="Data/mujoco_robot.urdf"
+                model_path=Connection.model_path
             )
             return True
         except Exception as e:
@@ -1063,26 +1063,26 @@ class PoseEditorGUI:
     # ------------------------------------------------------------------ #
 
     def _save_session(self):
-        """Save the pose sequence to pose_session.json."""
+        """Save the pose sequence to Data/Ex-GUI/pose_session.json."""
         try:
-            self.pose_manager.save_to_file("pose_session.json")
-            messagebox.showinfo("Saved", "Session saved to pose_session.json")
+            self.pose_manager.save_to_file("Data/Ex-GUI/pose_session.json")
+            messagebox.showinfo("Saved", "Session saved to Data/Ex-GUI/pose_session.json")
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save session:\n{str(e)}")
 
     def _load_session(self):
-        """Load a previously saved session from pose_session.json."""
-        if os.path.exists("pose_session.json"):
+        """Load a previously saved session from Data/Ex-GUI/pose_session.json."""
+        if os.path.exists("Data/Ex-GUI/pose_session.json"):
             try:
-                if self.pose_manager.load_from_file("pose_session.json"):
+                if self.pose_manager.load_from_file("Data/Ex-GUI/pose_session.json"):
                     self._refresh_pose_list()
-                    messagebox.showinfo("Loaded", "Session loaded from pose_session.json")
+                    messagebox.showinfo("Loaded", "Session loaded from Data/Ex-GUI/pose_session.json")
                 else:
                     raise Exception("Failed to load file")
             except Exception as e:
                 messagebox.showerror("Load Error", f"Failed to load session:\n{str(e)}")
         else:
-            messagebox.showinfo("Not Found", "No session file pose_session.json found")
+            messagebox.showinfo("Not Found", "No session file Data/Ex-GUI/pose_session.json found")
 
     def _clear_all(self):
         """Remove all poses from the sequence after confirmation."""
@@ -1101,7 +1101,7 @@ class PoseEditorGUI:
         On startup, offer to restore the last autosaved session if the
         autosave file exists.
         """
-        autosave_file = "pose_editor_autosave.json"
+        autosave_file = "Data/Ex-GUI/pose_editor_autosave.json"
         if os.path.exists(autosave_file):
             if messagebox.askyesno("Restore Session", "Found autosave file. Restore previous session?"):
                 if self.pose_manager.load_from_file(autosave_file):
@@ -1113,7 +1113,7 @@ class PoseEditorGUI:
     def _autosave(self):
         """Write the current session to the autosave file silently."""
         try:
-            self.pose_manager.save_to_file("pose_editor_autosave.json")
+            self.pose_manager.save_to_file("Data/Ex-GUI/pose_editor_autosave.json")
             self.changes_pending = False
         except Exception as e:
             print(f"Autosave failed: {e}")

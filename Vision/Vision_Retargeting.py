@@ -281,7 +281,7 @@ def main():
         port=Connection.Port,
         baudrate=Connection.baudrate,
         offsets=Connection.offsets,
-        model_path="Data/mujoco_robot.urdf"
+        model_path=Connection.model_path
     )
 
     # MediaPipe setup

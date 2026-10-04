@@ -359,7 +359,7 @@ def replay_motion(name: str, speed: float = 1.0):
         port=Connection.Port,
         baudrate=Connection.baudrate,
         offsets=Connection.offsets,
-        model_path="Data/mujoco_robot.urdf"
+        model_path=Connection.model_path
     )
 
     print(f"\nReplaying '{name}' ({n_frames} frames, {total_time:.1f}s) "

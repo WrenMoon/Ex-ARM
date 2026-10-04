@@ -51,21 +51,25 @@ class ExArm:
         self.real = None
         self.sim = None
 
-        if mode in ("real", "both"):
-            self.real = LeapHand(
-                ids=ids,
-                port=port,
-                baudrate=baudrate,
-                offsets=offsets
-            )
-
-        if mode in ("sim", "both"):
-            self.sim = SimHand(
-                model_path=model_path
-            )
-
         self._spacebar_listener = keyboard.Listener(on_press=self._on_key_press)
         self._spacebar_listener.start()
+
+        try:
+            if mode in ("real", "both"):
+                self.real = LeapHand(
+                    ids=ids,
+                    port=port,
+                    baudrate=baudrate,
+                    offsets=offsets
+                )
+
+            if mode in ("sim", "both"):
+                self.sim = SimHand(
+                    model_path=model_path
+                )
+        except Exception:
+            self._spacebar_listener.stop()
+            raise
 
     def _on_key_press(self, key):
         """Disable motor torque and interrupt the main program on spacebar."""

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from pynput import keyboard
 from utils.Constants import Connection
@@ -12,7 +13,7 @@ leap_hand = ExArm(
         port=Connection.Port,
         baudrate=Connection.baudrate,
         offsets=Connection.offsets,
-        model_path="Data/mujoco_robot.urdf"
+        model_path=Connection.model_path
     )
 
 grip = dict(
@@ -34,6 +35,9 @@ grip = dict(
                    25, 70, 25, 20],
     reached_target=[False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
 )
+
+log = pd.DataFrame(columns=["time", "positions", "velocities", "currents"])
+
 
 current_positions = grip["start_angles"]
 leap_hand.set_torque_enabled(True)
@@ -99,7 +103,18 @@ while not EndLoop:
 
     print(grip["reached_target"])
 
-    
+    log.loc[len(log)] = [
+        time.time(),
+        np.asarray(positions).tolist(),
+        np.asarray(velocities).tolist(),
+        np.asarray(currents).tolist(),
+    ]
+
+    log.to_csv("Data/Proprioception/log.csv", index=False)    
 
     time.sleep(0.2)
 
+pd.DataFrame(
+    [np.asarray(positions).tolist()],
+    columns=[f"joint_{i}" for i in range(16)],
+).to_csv("Data/Proprioception/grasp_results.csv", index=False)
