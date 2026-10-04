@@ -1,0 +1,64 @@
+{
+  "mount_translation_m": [
+    -0.06,
+    -0.048,
+    -0.035
+  ],
+  "mount_rotation_rpy_deg": [
+    -180.0,
+    0.0,
+    0.0
+  ],
+  "scale_percent": {
+    "start": 150,
+    "stop": 50,
+    "step": -5
+  },
+  "allow_convex_hull": true,
+  "objects": [
+    {
+      "file": "cube.step",
+      "class": "cube",
+      "size_name": "side_length",
+      "reference_size_m": 0.05
+    },
+    {
+      "file": "sphere.step",
+      "class": "sphere",
+      "size_name": "radius",
+      "reference_size_m": 0.025
+    },
+    {
+      "file": "cylinder.step",
+      "class": "cylinder",
+      "size_name": "radius",
+      "reference_size_m": 0.025
+    }
+  ],
+  "grasps": [
+    {
+      "start_angles": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "targets": {
+        "2": 80
+      },
+      "max_increment": 0.5
+    }
+  ]
+}

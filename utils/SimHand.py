@@ -36,17 +36,22 @@ class SimHand:
     # Inverse permutation: MuJoCo qpos index → logical index (used when reading back)
     REAL_TO_SIM = np.argsort(SIM_TO_REAL)
 
-    def __init__(self, model_path):
+    def __init__(self, model_path, enable_viewer=True):
         """
-        Load the MuJoCo model and launch the passive viewer.
+        Load the MuJoCo model and optionally launch the passive viewer.
 
         Parameters
         ----------
         model_path : str — path to the URDF or MuJoCo XML file.
+        enable_viewer : bool — if True, launch the passive viewer. Default True.
         """
         self.model  = mujoco.MjModel.from_xml_path(model_path)
         self.data   = mujoco.MjData(self.model)
-        self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+        self.viewer = None
+        self.enable_viewer = enable_viewer
+
+        if self.enable_viewer:
+            self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
         # Holds (N, 3) marker positions for optional IK target visualisation
         self.custom_marker_positions = np.zeros((0, 3), dtype=np.float64)
@@ -64,7 +69,7 @@ class SimHand:
         """
         mujoco.mj_forward(self.model, self.data)
         self._draw_custom_markers()
-        if self.viewer.is_running():
+        if self.viewer is not None and self.viewer.is_running():
             self.viewer.sync()
 
     # ------------------------------------------------------------------ #
@@ -154,7 +159,7 @@ class SimHand:
 
     def close(self):
         """Close the MuJoCo viewer window if it is still open."""
-        if self.viewer.is_running():
+        if self.viewer is not None and self.viewer.is_running():
             self.viewer.close()
 
     # ------------------------------------------------------------------ #
@@ -181,8 +186,11 @@ class SimHand:
 
         Each marker is drawn as a 5 mm radius red sphere. The buffer is
         cleared and rebuilt every frame to avoid accumulating stale markers.
-        Silently no-ops on MuJoCo versions that do not expose user_scn.
+        Silently no-ops if viewer is disabled or unsupported.
         """
+        if self.viewer is None:
+            return
+
         if not hasattr(self.viewer, "user_scn"):
             print("[SimHand] viewer has no user_scn attribute in this mujoco version.")
             return

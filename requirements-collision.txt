@@ -1,0 +1,2 @@
+# Optional dependency for Build_Collision_Model.py; install alongside requirements-simulation.txt.
+coacd==1.0.14
