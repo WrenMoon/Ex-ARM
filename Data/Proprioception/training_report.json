@@ -1,0 +1,125 @@
+{
+  "validation_accuracy": 0.8666666666666667,
+  "validation_size_mae_mm": 1.363822409510568,
+  "accepted_count": 5,
+  "accepted_correct": 5,
+  "validation_count": 15,
+  "unknown_distance": 0.0697128202311211,
+  "simulation_count": 63,
+  "settings": {
+    "max_angles": [
+      -75,
+      90,
+      90,
+      60,
+      0,
+      80,
+      80,
+      65,
+      75,
+      90,
+      90,
+      60,
+      0,
+      100,
+      110,
+      80
+    ],
+    "measurement_noise_deg": 0.5,
+    "mount_rotation_rpy_deg": [
+      -180,
+      0,
+      0
+    ],
+    "mount_translation_m": [
+      -0.06,
+      -0.048,
+      -0.035
+    ],
+    "network_epochs": 1000,
+    "network_hidden_size": 32,
+    "network_learning_rate": 0.02,
+    "noisy_samples_per_grasp": 50,
+    "objects": [
+      {
+        "class_name": "cube",
+        "file": "cube.step",
+        "reference_size_m": 0.05,
+        "size_name": "side_length"
+      },
+      {
+        "class_name": "sphere",
+        "file": "sphere.step",
+        "reference_size_m": 0.025,
+        "size_name": "radius"
+      },
+      {
+        "class_name": "cylinder",
+        "file": "cylinder.step",
+        "reference_size_m": 0.025,
+        "size_name": "radius"
+      }
+    ],
+    "random_seed": 7,
+    "scale_start_percent": 150,
+    "scale_step_percent": -5,
+    "scale_stop_percent": 50,
+    "sim_joint_offsets_deg": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "size_loss_weight": 1.0,
+    "start_angles": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      180,
+      0,
+      0
+    ],
+    "step_sizes": [
+      -1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      -1,
+      1,
+      1
+    ],
+    "unknown_distance_multiplier": 1.5,
+    "validation_stride": 5
+  }
+}
