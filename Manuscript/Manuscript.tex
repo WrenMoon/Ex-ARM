@@ -1,218 +1,427 @@
-\documentclass[authoryear,journal,12pt]{elsarticle}
+\documentclass[authoryear,12pt]{elsarticle}
 
-\usepackage{graphicx,natbib,amssymb,lineno}
 \usepackage{amsmath}
-\usepackage{amsbsy,amsfonts}
-\usepackage{bm}
-\usepackage{epsfig}
-\usepackage{soul}
-\usepackage[normalem]{ulem}
+\usepackage{amssymb}
 \usepackage{booktabs}
-\usepackage{array,multirow}
-\usepackage[percent]{overpic}
-\usepackage{epstopdf}
+\usepackage{array}
+\usepackage{graphicx}
 \usepackage{hyperref}
 
 \begin{document}
 
 \begin{frontmatter}
 
-\title{Active Perception of Object Shape Using a Sensorless Dexterous Robotic Hand}
+\title{Active Proprioceptive Recognition of Object Shape and Size with a
+LEAP Hand: A Simulation-Based Study}
 
-\author[sch]{G.~Sai~Pranav}
-\author[iitgn]{Prof.~Harish J.~Palanthandalam-Madapusi}
+\author{G.~Sai~Pranav}
+\author{Prof.~Harish J.~Palanthandalam-Madapusi}
 
 \begin{abstract}
-
-Robots commonly rely on cameras, depth sensors, or dedicated tactile sensors
-to identify and understand objects. In this project, we investigate whether
-a dexterous robotic hand can identify an object's shape and estimate its
-dimensions using proprioceptive information obtained through physical
-interaction, without relying on external visual or dedicated tactile
-sensing.
-
-We use a LEAP Hand to interact with two geometric objects: a cube with a
-side length of 7.5~cm and a sphere with a diameter of 7.5~cm. The hand
-performs controlled exploratory movements while we record proprioceptive
-information such as joint states, motor positions, finger trajectories,
-and, where applicable, motor currents. These observations provide indirect
-information about the object's geometry through the way the fingers move
-and interact with its surface.
-
-We follow an active perception approach in which manipulation is treated as
-a source of information. Rather than making a decision from a single grasp,
-the hand explores the object through successive interactions and uses the
-resulting observations to construct an initial internal representation. As
-manipulation continues, new contacts generated through movements such as
-rotation, sliding, pivoting, or regrasping provide additional information
-that can be used to refine this representation. We then identify the object
-as a cube or a sphere and estimate its corresponding physical dimension.
-
+Can the final joint configuration of one controlled grasp identify both
+the shape and size of a known object type at an unseen scale? We
+investigate this question with a 16-joint LEAP Hand and a reproducible
+simulation-to-hardware pipeline. Three fixed computer-aided-design
+objects---a cube, sphere, and cylinder---are placed at one common pose in
+MuJoCo and uniformly scaled from 50\% to 150\% in 5\% increments. During
+each grasp, collision stops all four joints of a contacted finger. The
+resulting 16 final joint angles train a small neural network to classify
+shape and regress scale; a separate rule rejects ambiguous or distant
+grasps as unknown. On 15 held-out simulated sizes, the network correctly
+classified 13 (86.7\%) and achieved a 1.36\,mm mean absolute
+ground-truth-dimension-weighted scale error. The rejection rule accepted
+five of these 15 grasps, all correctly classified. The physical-hand
+program implements the corresponding grasp using motor current as a
+contact proxy, but this manuscript reports no physical-hand recognition
+trials. The results establish a simulation baseline for joint-angle-only
+recognition under fixed placement, while leaving real-world transfer and
+rejection of genuinely novel objects to future experiments.
 \end{abstract}
 
+\begin{keyword}
+proprioception \sep active perception \sep robotic hand \sep object
+recognition \sep size estimation \sep simulation-to-real transfer
+\end{keyword}
 
 \end{frontmatter}
 
-\textbf{Keywords:} Active perception, dexterous manipulation, proprioception,
-robotic hand, object shape recognition, LEAP Hand, proprioceptive perception.
-
-\clearpage
-
-\renewcommand{\baselinestretch}{1.0}
 \section{Introduction}
-\label{sec:intro}
+\label{sec:introduction}
 
-Understanding an unfamiliar object is an important capability for a robot
-that needs to interact with its surroundings. Humans can often infer an
-object's approximate shape and size through physical interaction by moving
-their fingers, changing their grasp, and observing how the object responds,
-even when visual information is unavailable. This raises the possibility
-that a robotic hand could similarly obtain information about an object
-through its own movements and interactions.
+A robot can obtain information about an object by acting on it. For a
+dexterous hand, the joint configuration reached while closing around a
+surface depends on both the object's geometry and its size. This suggests
+a form of active perception in which the movement of the hand generates
+the observation used for recognition. Motor positions are available on
+the LEAP Hand without an external camera or dedicated tactile skin
+\citep{ShawAgarwalPathak2023}.
 
-Dexterous robotic hands provide a suitable platform for investigating this
-idea. Their multiple fingers and joints generate proprioceptive information
-about the configuration and movement of the hand. When the fingers interact
-with an object, these measurements can indirectly reflect characteristics
-of its geometry.
+Prior work demonstrates that hand kinematics can support recognition.
+\citet{VasquezPerdereau2017} constructed proprioceptive shape signatures
+from joint angles and studied recognition across object sizes and poses.
+\citet{SintovMeir2023} used computationally generated grasps for
+kinesthetic object recognition and evaluated recognition of both
+individual instances and broad geometric categories. These studies
+motivate a controlled experiment that asks whether a compact final-angle
+observation can support \emph{both} shape classification and a continuous
+estimate of physical scale.
 
-Previous studies have demonstrated the potential of proprioception for
-object recognition. V'asquez and Perdereau developed a proprioceptive
-shape signature based on joint angles to recognize primitive object shapes
-and estimate object pose. Their representation was designed to be invariant
-to object size and position \citep{VasquezPerdereau2017}. Sintov and Meir
-subsequently demonstrated object recognition using the kinematics of a
-multi-fingered robotic hand without relying on visual or tactile sensing,
-including recognition of broader geometric categories
-\citep{SintovMeir2023}.
+The research question here is deliberately narrow: given a fixed object
+mount, a fixed exploratory grasp, and a set of three trained object
+classes, how well can the final 16 joint angles distinguish class and
+estimate size at scales excluded from training? The fixed mount removes
+object-pose variation so that the effect of scale can be examined first.
+The project also implements a matching grasp and prediction program for
+the physical hand. Its intended transfer mechanism replaces simulated
+mesh contact with a motor-current threshold, while preserving the
+four-joint finger stopping rule and final-angle input. This transfer
+mechanism has not yet been evaluated with labeled real-hand trials.
 
-These studies establish that proprioceptive information can provide useful
-information about object geometry. However, their primary focus is on
-recognizing object shapes or categories, rather than estimating the
-physical dimensions of the object as an output. The present project builds
-on this direction by investigating whether proprioceptive interaction can
-be used for both shape identification and dimensional estimation.
+The contributions of the present implementation are (i) a parameterized
+MuJoCo grasp-data generator for STEP objects and a 16-joint LEAP Hand
+model, (ii) a reproducible joint-angle classifier and size regressor with
+an explicit unknown-output rule, and (iii) a physical-hand execution and
+logging program. The measurements reported below concern the simulated
+data generator and held-out scale evaluation.
 
-In the present study, we investigate whether a dexterous robotic hand can
-identify an object as a cube or sphere and estimate its physical dimension
-using proprioceptive information obtained through active physical
-interaction, without external visual or dedicated tactile sensing. We use
-a LEAP Hand and two geometric objects: a cube with a side length of 7.5~cm
-and a sphere with a diameter of 7.5~cm. Their known dimensions provide ground
-truth against which the estimated dimensions can be evaluated.
-
-
-\section{Data and Methods}
+\section{Materials and Methods}
 \label{sec:methods}
 
-\subsection{Experimental Setup}
+\subsection{Hand, software, and object models}
+\label{sec:setup}
 
-The experiments were conducted using a LEAP Hand, an open-source
-dexterous robotic hand with four fingers and 16 actuated joints. The
-index, middle, and ring fingers each have four joints, while the thumb has
-four joints comprising base rotation and flexion-related movements. The
-hand provides proprioceptive information about its joint configuration
-during physical interaction with an object.
+The platform is a four-finger, 16-actuator LEAP Hand
+\citep{ShawAgarwalPathak2023}. The logical joint vector is ordered as
+index joints 0--3, middle joints 4--7, ring joints 8--11, and thumb joints
+12--15. All commanded and recorded joint angles in the experiment are in
+degrees. MuJoCo stores joint coordinates internally in radians
+\citep{TodorovErezTassa2012}. The included hand URDF and link meshes define
+the simulated geometry. The URDF limits at joints 0, 8, 13, and 14 were
+expanded to admit the configured grasp; no simulation-to-hardware angle
+offset is currently applied.
 
-Two geometric objects were used in the experiments: a cube with a side
-length of 7.5~cm and a sphere with a diameter of 7.5~cm. The known
-dimensions of these objects provide ground-truth values for evaluating
-the estimated dimensions.
+Three STEP models are used: a cube, sphere, and cylinder. The reference
+cube side length is 50\,mm. The reference radius is 25\,mm for both the
+sphere and cylinder. Every object is fixed at the same pose relative
+to the simulation frame: translation $(-0.060,-0.048,-0.035)$\,m and
+roll--pitch--yaw orientation $(-180^\circ,0^\circ,0^\circ)$. STEP
+coordinates are treated as millimetres, converted to metres, and
+multiplied by a uniform scale factor. The same factor changes every
+object dimension, although the model predicts only the designated size
+measure in Table~\ref{tab:objects}.
 
-The hand was operated using the Ex-ARM Python control framework developed
-for the LEAP Hand. The framework provides an interface for hardware
-control and includes a kinematic model for calculating fingertip
-positions from the joint configuration. The hardware interface provides
-access to joint positions, velocities, and motor currents, while the
-kinematic model provides forward kinematics for the four fingertips.
+\begin{table}[ht]
+\centering
+\caption{Simulated object classes and the physical quantity predicted.
+Each class has 21 scales from 50\% to 150\%, inclusive.}
+\label{tab:objects}
+\begin{tabular}{llll}
+\toprule
+Class & Predicted quantity & Reference & Sweep range \\
+\midrule
+Cube & Side length & 50\,mm & 25--75\,mm \\
+Sphere & Radius & 25\,mm & 12.5--37.5\,mm \\
+Cylinder & Radius & 25\,mm & 12.5--37.5\,mm \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\subsection{Proprioceptive Data}
-\label{sec:proprioceptive_data}
+\subsection{A standardized active grasp}
+\label{sec:grasp}
 
-The perception process relies on information obtained from the robotic
-hand itself rather than from external cameras, depth sensors, or dedicated
-tactile sensors. During physical interaction, the configuration of the
-fingers changes according to the geometry of the contacted surface. These
-changes provide indirect information about the shape and dimensions of
-the object.
+The grasp uses the same start posture, target posture, and one-degree
+command increments for every simulated object. Table~\ref{tab:grasp}
+specifies the joint vectors in the logical order defined above. Joint
+values are clamped at their target angles. The grasp terminates when all
+four fingers have stopped, with a cap of 250 iterations. A finger stops
+as one unit: contact at any of its links freezes all four joints of that
+finger, while other fingers may continue closing. Reaching all configured
+target angles also stops a finger.
 
-The primary proprioceptive measurements consist of joint states obtained
-from the LEAP Hand. Motor-current measurements are also used to identify
-changes associated with physical contact. Since motor current is not a
-dedicated tactile measurement, it is treated as a contact proxy rather
-than as a direct measurement of contact force.
+\begin{table}[ht]
+\centering
+\caption{Configured grasp angles and per-step increments, in degrees.
+Each bracket contains the four joints of one finger.}
+\label{tab:grasp}
+\small
+\begin{tabular}{llll}
+\toprule
+Finger & Start & Target & Increment \\
+\midrule
+Index & $[0,0,0,0]$ & $[-75,90,90,60]$ & $[-1,1,1,1]$ \\
+Middle & $[0,0,0,0]$ & $[0,80,80,65]$ & $[1,1,1,1]$ \\
+Ring & $[0,0,0,0]$ & $[75,90,90,60]$ & $[1,1,1,1]$ \\
+Thumb & $[0,180,0,0]$ & $[0,100,110,80]$ & $[1,-1,1,1]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-The recorded joint positions are supplied to the LEAP Hand forward
-kinematic model to determine the corresponding fingertip positions in the
-hand coordinate frame. The resulting fingertip locations provide spatial
-observations of the object surface during interaction.
+\subsection{Simulation of contact and data collection}
+\label{sec:simulation}
 
-\subsection{Active Physical Exploration}
-\label{sec:active_exploration}
+The simulation code imports each STEP object with CadQuery, tessellates
+it into a triangle mesh, and mounts that mesh as a fixed body in a
+MuJoCo scene containing the hand URDF. Explicit object--hand collision
+pairs are added. Contact geometries are assigned to a finger through
+their parent bodies; contact with the palm or an unexpected stationary
+finger is treated as an invalid scene. Any object already touching the
+hand in the initial posture is also rejected.
 
-The object is explored through a sequence of physical interactions rather
-than through a single static grasp. The fingers are moved towards the
-object and contact is identified from changes in the proprioceptive state.
-For each detected contact, the corresponding joint configuration is used
-to determine the fingertip position through forward kinematics.
+At each grasp iteration, the simulator advances one active finger at a
+time and tests the proposed posture for mesh contact. If contact occurs,
+eight bisection steps between the last clear posture and the blocked
+posture locate a nearby collision-free final angle. The entire finger
+then stops. This is a kinematic contact experiment: joint positions are
+set directly, with no learned grasp policy, motor dynamics, force
+prediction, or simulated motor current. The recorded feature for scene
+$i$ is the final vector
+\begin{equation}
+\mathbf q_i=(q_{i,0},\ldots,q_{i,15})\in\mathbb R^{16},
+\label{eq:angles}
+\end{equation}
+along with its class, scale, physical size, and each finger's stop
+reason. A complete step-by-step trace is saved for replay in the
+MuJoCo viewer.
 
-The hand and object are maintained in a fixed relative configuration
-during individual probing operations, and the hand is released between
-successive contacts. This allows contact observations to be collected
-from different probing configurations while maintaining a common
-reference frame.
+The scale sweep is $s\in\{0.50,0.55,\ldots,1.50\}$, so the three classes
+produce $3\times21=63$ simulated scenes. Each class has exactly one
+deterministic simulated grasp per size. No object-pose randomization or
+repeated physical trials are part of this dataset.
 
-Each new contact provides an additional observation of the object's
-surface. Consequently, the geometric representation is progressively
-constructed from multiple contact locations. Movements that change the
-contact configuration can expose different portions of the object and
-provide additional information for perception.
+\begin{figure}[ht]
+\centering
+\fbox{\begin{minipage}{0.90\linewidth}
+\centering
+STEP mesh + fixed pose + scale $\longrightarrow$ MuJoCo closing grasp\\[3pt]
+$\longrightarrow$ 16 final joint angles $\longrightarrow$
+class-and-scale network + rejection rule\\[7pt]
+Physical object $\longrightarrow$ current-limited closing grasp
+$\longrightarrow$ measured final angles\\[3pt]
+$\longrightarrow$ saved network $\longrightarrow$
+class, size, or unknown
+\end{minipage}}
+\caption{Implemented data and inference paths. The lower path is
+implemented for the real hand but has not supplied the quantitative
+results in this paper.}
+\label{fig:pipeline}
+\end{figure}
 
-This approach treats manipulation as part of the perception process.
-Instead of separating perception from manipulation, the physical
-interaction itself provides the observations from which the object's
-geometry can be inferred.
+\subsection{Feature preparation and model}
+\label{sec:model}
 
-\subsection{Object Shape Identification}
-\label{sec:shape_identification}
+Only the final angles in Eq.~\eqref{eq:angles} are model inputs.
+Positions, velocities, motor currents, fingertip trajectories, and
+per-step contact histories are not training features. Each angle is
+normalized by the configured grasp span:
+\begin{equation}
+x_j=\frac{q_j-a_j}{b_j-a_j},
+\label{eq:normalization}
+\end{equation}
+where $a_j$ and $b_j$ are the start and target angles. For a joint with
+$a_j=b_j$, the implementation substitutes a denominator of one. The
+input $\mathbf x\in\mathbb R^{16}$ passes through a fully connected
+32-unit hyperbolic-tangent layer. The four output values consist of
+three class logits and one continuous predicted scale factor
+$\hat s$. A softmax converts the logits to class probabilities. With
+three classes, the network has
+$16(32)+32+32(4)+4=676$ trainable parameters.
 
-The collected proprioceptive observations are used to distinguish between
-the two object geometries. The fingertip contact locations obtained from
-the hand's joint states provide a spatial representation of the contacted
-surface.
+Training minimizes mean class cross-entropy plus mean squared scale
+error:
+\begin{equation}
+\mathcal L=
+-\frac{1}{N}\sum_{i=1}^{N}\log p_{i,c_i}
++\lambda\frac{1}{N}\sum_{i=1}^{N}(\hat s_i-s_i)^2,
+\qquad \lambda=1.
+\label{eq:loss}
+\end{equation}
+The NumPy implementation uses full-batch Adam for 1000 epochs, a
+learning rate of 0.02, and random seed 7. For each simulated grasp,
+50 independent copies receive zero-mean Gaussian measurement noise
+with a 0.5-degree standard deviation per angle; the unmodified
+example is retained. The augmented copies approximate position
+measurement variation but do not model systematic calibration error.
 
-For the sphere, contact locations are expected to follow the curved
-surface of the object, whereas contacts with the cube are associated with
-its planar faces and edges. The spatial distribution of the contact
-observations is therefore used to distinguish the two geometric classes.
+\subsection{Validation protocol and unknown decision}
+\label{sec:validation}
 
-The Ex-ARM implementation includes an experimental proprioceptive
-shape-recognition procedure based on LEAP joint states and motor-current
-changes for distinguishing sphere-like and box-like objects. Contact
-samples are generated from the measured joint positions using the LEAP
-Hand forward-kinematics model.
+The data split is made by \emph{size before augmentation}. Every fifth
+scale---50\%, 75\%, 100\%, 125\%, and 150\%---is held out for each
+class. Thus 48 distinct simulated scenes produce 2448 training
+examples (48 original vectors plus 50 noisy copies each), while 15
+unmodified scenes are used for validation. A separate final model is
+then trained on all 63 scenes and their noisy copies (3213 examples)
+for later physical-hand use. The validation figures in this paper
+refer to the model trained on the 48-scene subset.
 
-\subsection{Dimensional Estimation}
-\label{sec:dimension_estimation}
+Raw classification accuracy is the fraction of the 15 validation
+scenes whose highest-probability class equals the ground-truth class.
+For scale, the reported mean absolute error is
+\begin{equation}
+\mathrm{MAE}_{\mathrm{size}} =
+\frac{1}{15}\sum_{i=1}^{15}
+|\hat s_i-s_i|\,d_{c_i},
+\label{eq:mae}
+\end{equation}
+where $d_{c_i}$ is the \emph{ground-truth class's} reference dimension.
+This measures scale regression in physical units even for a
+misclassified scene; it is not the error of the final class-conditioned
+size output when the predicted class is wrong.
 
-Following shape identification, the proprioceptive contact observations
-are used to estimate the corresponding physical dimension of the object.
-For the cube, the characteristic dimension is its side length, while for
-the sphere it is its diameter.
+The deployed output may instead be \texttt{unknown}. Four checks are
+applied in order. First, the Euclidean distance from the normalized
+input to its nearest simulated reference vector must not exceed a
+distance threshold. That threshold is 1.5 times the largest nearest
+training-scene distance of the 15 held-out scales (0.0697 for the
+present dataset). Second, the largest class probability must be at
+least 0.75. Third, the network class must agree with the class of
+the nearest simulated reference vector. Fourth, the difference
+between the two smallest \emph{classwise} nearest-reference distances,
+measured in raw angle degrees, must be at least $2^\circ$. A failure
+at any step returns \texttt{unknown} without a size. Otherwise, the
+predicted scale is clipped to $[0.50,1.50]$ and multiplied by the
+reference dimension for the predicted class.
 
-The estimated dimension is obtained from the spatial information provided
-by the successive contact observations and is compared with the known
-ground-truth dimension of 7.5~cm. This provides a direct measure of how
-well proprioceptive interaction can recover the physical scale of the
-object without external visual or dedicated tactile sensing.
+The distance threshold was calculated from the same 15 scales on
+which accepted/rejected outcomes are reported. Those outcomes are
+therefore descriptive, not an independent evaluation of the
+unknown-object rule. No untrained CAD object class was tested.
 
-The complete implementation used in this study is publicly available in
-the Ex-ARM GitHub repository \citep{ExARM}.
+\subsection{Physical-hand implementation and reproducibility}
+\label{sec:physical}
+
+The hardware program sends the grasp through \texttt{ExArm}. It reads
+all 16 motor positions, velocities, and signed currents through the
+Dynamixel driver. For each
+moving joint, a current exceeding its calibrated threshold in the
+commanded direction stops that joint's entire finger at its measured
+pose. The per-joint threshold vectors are
+$[22,80,25,20]$ for each of the index, middle, and ring fingers and
+$[25,70,25,20]$ for the thumb, in the values returned by the motor-state
+reader. The hand settles for 2\,s before the grasp, waits 0.2\,s between
+command steps, and aborts after repeated state-read failures or more
+than 250 steps. These thresholds are configurable and may require
+recalibration; motor current is a contact proxy, not a direct
+measurement of contact force.
+
+After the final state read, the physical program supplies the measured
+16-angle vector to the saved model, prints class and size or an
+unknown reason, and saves a timestamped JSON result. It also saves
+joint-state traces and the final angle vector as CSV files. This code
+path is implemented, but the repository contains no labeled
+real-object results, so no sim-to-real recognition accuracy is claimed.
+
+The experiment settings are in \path{utils/Constants.py}. The main
+entry points generate and train simulated grasps
+(\path{Train_Proprioception.py}), replay saved grasp trajectories
+(\path{View_Proprioception.py}), and run recognition on the physical
+hand (\path{Run_Proprioception.py}). The
+\path{Data/Proprioception} directory holds final grasp angles, step
+traces, augmented samples, validation rows, the training report, and
+the saved model weights. The implementation and data form part of the
+Ex-ARM project \citep{ExARM}.
 
 \section{Results}
 \label{sec:results}
 
-\clearpage
+The generated dataset contains 63 completed simulated grasps and
+5993 recorded time-step rows, including the initial posture of each
+scene. Across the 252 finger endings (four per scene), 210 were
+attributed to object contact and 42 to reaching the configured
+angle limits. These counts confirm that the simulated closing motion
+generated object contact in many finger trajectories; they are not a
+measure of recognition performance.
+
+On the 15 scales excluded from the validation model's training set,
+13 raw network class predictions were correct (86.7\%). Table
+\ref{tab:validation} shows results by class. Both raw errors were
+sphere-or-cylinder scenes predicted as cube. The scale-factor
+regression achieved the ground-truth-dimension-weighted MAE of
+1.36\,mm defined in Eq.~\eqref{eq:mae}.
+
+\begin{table}[ht]
+\centering
+\caption{Held-out simulated-scale validation. Accepted means that
+none of the four unknown-output checks rejected the grasp. The
+acceptance rule uses a distance threshold derived from these
+held-out scales.}
+\label{tab:validation}
+\begin{tabular}{lccc}
+\toprule
+True class & Scenes & Raw class correct & Accepted (correct) \\
+\midrule
+Cube & 5 & 5 & 3 (3) \\
+Sphere & 5 & 4 & 1 (1) \\
+Cylinder & 5 & 4 & 1 (1) \\
+\midrule
+Total & 15 & 13 & 5 (5) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The unknown-output rule rejected 10 of the 15 held-out grasps: five
+because the two nearest classes had similar angle vectors and five
+because the network's maximum class probability was below 0.75.
+All five accepted grasps had the correct class, but the acceptance
+rate was only one third. Since the threshold was set using these
+same held-out sizes and no novel object class was tested, this
+result cannot establish real-world unknown-object detection.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The held-out-scale results support the limited proposition that a
+single controlled closing motion can carry information about both
+class and scale when the object remains at a known pose in the
+simulator. At the same time, some sphere and cylinder configurations
+produced final angles that the network assigned to the cube class,
+and the conservative rejection checks discarded most validation
+grasps. A larger set of independent test sizes, repeated grasps,
+and baseline classifiers would be required to estimate robustness
+and compare alternative representations.
+
+The central transfer uncertainty lies in how a simulated collision
+corresponds to a motor-current event on the physical hand. Real
+motors, transmission compliance, current noise, friction, and object
+mount errors can shift the final angle relative to the idealized
+collision-free boundary used for training. Gaussian perturbation
+of 0.5 degrees does not reproduce these effects. The experiment also
+holds orientation and position fixed, so its numerical results do
+not generalize to freely held or moving objects. Because each class
+has one mesh and only uniform scaling, the model has not learned
+within-class shape variation.
+
+The present manuscript concerns the implemented final-angle
+method. It does not use fingertip reconstruction, multi-grasp
+surface mapping, or an adaptive exploration policy. Such methods
+could add information where a single grasp is ambiguous, but their
+benefit would need to be tested against this baseline. Similarly,
+open-set performance requires independent objects that were absent
+from both training and threshold selection.
+
+A physical evaluation should next mount measured examples of all
+three classes at the simulated pose and collect repeated labeled
+grasps over several sizes. The comparison should report class
+accuracy, size error, rejection rate, and differences between each
+real final-angle vector and its matching simulated vector. Separate
+tests with new shapes and perturbed placements would then test
+unknown detection and domain transfer without tuning thresholds on
+the test cases.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This study implements active object recognition with a LEAP Hand
+using only final joint angles. With a fixed object pose and 63 simulated
+grasps across cube, sphere, and cylinder models, a 676-parameter
+network classified 13 of 15 held-out sizes correctly and achieved
+1.36\,mm mean absolute scale-regression error in the reported size
+units. A rule-based unknown output accepted five held-out grasps,
+all correctly classified, at low coverage. These are simulation
+results. The corresponding physical current-limited grasp and
+inference code are available for experimental measurement, but the
+accuracy of physical recognition and the ability to reject
+genuinely novel objects remain open questions.
 
 \bibliographystyle{elsart-harv}
 \bibliography{manuscript}

@@ -41,10 +41,10 @@ class Proprioception:
     objects = [
         dict(file="cube.step", class_name="cube", size_name="side_length",
              reference_size_m=0.05),
-        dict(file="sphere.step", class_name="sphere", size_name="radius",
-             reference_size_m=0.025),
-        dict(file="cylinder.step", class_name="cylinder", size_name="radius",
-             reference_size_m=0.025),
+        dict(file="sphere.step", class_name="sphere", size_name="diameter",
+             reference_size_m=0.05),
+        dict(file="cylinder.step", class_name="cylinder", size_name="diameter",
+             reference_size_m=0.05),
     ]
     mount_translation_m = [-0.06, -0.048, -0.035]
     mount_rotation_rpy_deg = [-180, 0, 0]
