@@ -17,7 +17,7 @@ class Proprioception:
         start_angles=[0, 0, 0, 0,
                       0, 0, 0, 0,
                       0, 0, 0, 0,
-                      0, 180, 0, 0],
+                      0, 180, 40, 25],
         max_angles=[-75, 90, 90, 60,
                     0, 80, 80, 65,
                     75, 90, 90, 60,
@@ -46,7 +46,7 @@ class Proprioception:
         dict(file="cylinder.step", class_name="cylinder", size_name="diameter",
              reference_size_m=0.05),
     ]
-    mount_translation_m = [-0.06, -0.048, -0.035]
+    mount_translation_m = [-0.06, -0.037, -0.035]
     mount_rotation_rpy_deg = [-180, 0, 0]
     sim_joint_offsets_deg = [0] * 16
     scale_start_percent = 150

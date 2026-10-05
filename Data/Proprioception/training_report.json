@@ -1,10 +1,10 @@
 {
-  "validation_accuracy": 0.8666666666666667,
-  "validation_size_mae_mm": 1.363822409510568,
-  "accepted_count": 5,
-  "accepted_correct": 5,
+  "validation_accuracy": 0.8,
+  "validation_size_mae_mm": 0.8322495397390972,
+  "accepted_count": 3,
+  "accepted_correct": 3,
   "validation_count": 15,
-  "unknown_distance": 0.0697128202311211,
+  "unknown_distance": 0.07543104969116127,
   "simulation_count": 63,
   "settings": {
     "max_angles": [
@@ -33,7 +33,7 @@
     ],
     "mount_translation_m": [
       -0.06,
-      -0.048,
+      -0.037,
       -0.035
     ],
     "network_epochs": 1000,
@@ -50,14 +50,14 @@
       {
         "class_name": "sphere",
         "file": "sphere.step",
-        "reference_size_m": 0.025,
-        "size_name": "radius"
+        "reference_size_m": 0.05,
+        "size_name": "diameter"
       },
       {
         "class_name": "cylinder",
         "file": "cylinder.step",
-        "reference_size_m": 0.025,
-        "size_name": "radius"
+        "reference_size_m": 0.05,
+        "size_name": "diameter"
       }
     ],
     "random_seed": 7,
@@ -98,8 +98,8 @@
       0,
       0,
       180,
-      0,
-      0
+      40,
+      25
     ],
     "step_sizes": [
       -1,
