@@ -2,7 +2,7 @@
 
 Ex-ARM is a Python project for a 16-joint LEAP Hand. It brings together Dynamixel motor control, a MuJoCo hand viewer, forward and inverse kinematics, webcam teleoperation, a pose-sequencing GUI, recorded motion replay, and proprioceptive object recognition. Each tool can be used independently to control, observe, teach, or study the hand.
 
-The project is under active development. The included proprioception model has been evaluated on simulated grasps; recognition accuracy on the physical hand has not yet been measured. The [research manuscript](Manuscript/Manuscript.tex) describes that distinction and the current experiment.
+The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps, and nine physical grasps now support a separate class-only baseline. Recognition accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) describes the simulated study and has not yet been updated with these physical trials.
 
 ## Contents
 
@@ -28,6 +28,7 @@ The project is under active development. The included proprioception model has b
 | Motion teaching | [`Vision/Vision_Kinesthetic_Teaching.py`](Vision/Vision_Kinesthetic_Teaching.py) | Record hand landmarks, process an angle trajectory, and replay it. |
 | Pose editing and playback | [`Ex-GUI.py`](Ex-GUI.py), [`Pose_Sequence_Runner.py`](Pose_Sequence_Runner.py) | Build, save, and play 16-joint pose sequences. |
 | Proprioception research | [`Grasp.py`](Grasp.py), [`Train_Proprioception.py`](Train_Proprioception.py), [`View_Proprioception.py`](View_Proprioception.py), [`Run_Proprioception.py`](Run_Proprioception.py) | Generate simulated grasps, train a class-and-size model, inspect trials, and run recognition on the physical hand. |
+| Physical-only experiment | [`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) | Collect three real grasps per class and identify classes using saved physical trials. |
 | Diagnostics and utilities | [`test1.py`](test1.py), [`utils/BoxPrinter.py`](utils/BoxPrinter.py), [`utils/URDF_Convertor.py`](utils/URDF_Convertor.py) | Display live motor state and assist with URDF mesh paths. |
 
 The [`Data/`](Data/) folder contains the hand model, three STEP objects, example pose series, the MediaPipe hand landmark model, saved GUI sessions, and generated recognition data. The [`Manuscript/`](Manuscript/) folder contains the LaTeX research manuscript and its PDF.
@@ -242,7 +243,7 @@ This command regenerates the simulated grasp files, trains the model, and prints
 
 Training uses NumPy/Adam, class cross-entropy plus scale squared error, and 50 noisy copies per simulated grasp with 0.5° Gaussian angle noise by default. Every fifth scale is excluded from the validation model's training data. A final model is then fitted using all 63 simulated sizes. An `unknown` result is a rule-based rejection if a grasp is distant from references, has low class probability, disagrees with the nearest reference class, or is too similar to another class.
 
-The checked-in report records **13/15 (86.7%) raw class predictions correct** and **1.02 mm** mean absolute size error on held-out simulated sizes. The rejection rule accepted **3/15**, all with the correct class. Its distance threshold was derived using those same held-out sizes, so accepted/rejected results are descriptive rather than an independent test of novel-object detection. No labeled real-hand recognition results are in the repository.
+The checked-in report records **13/15 (86.7%) raw class predictions correct** and **1.02 mm** mean absolute size error on held-out simulated sizes. The rejection rule accepted **3/15**, all with the correct class. Its distance threshold was derived using those same held-out sizes, so accepted/rejected results are descriptive rather than an independent test of novel-object detection. Nine labeled real-hand trials are now included for comparison; the simulated model's physical accuracy has not been established.
 
 ### Physical recognition
 
@@ -253,6 +254,20 @@ python Run_Proprioception.py
 ```
 
 Set `Connection.Port` and verify the hand's motor IDs, angle offsets, calibrated current thresholds, and object fixture before running it. `Proprioception.hand_mode` must remain `"real"` for the final recognition program. The physical object must be mounted in the same relative position used for training.
+
+### Physical-only class experiment
+
+[`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) is a separate class-only baseline. It uses the same physical [`Grasp.py`](Grasp.py), but does not load simulations, the neural network, or `model.npz`. Training stores three final-angle trials per class. Recognition chooses the class of the nearest stored trial using Euclidean distance across the 16 joint angles. It does not estimate size, calculate a calibrated confidence, or reject an unknown class.
+
+```bash
+python Physical_Only_Proprioception.py
+```
+
+The terminal menu can collect a new named dataset, retrain a saved dataset, or identify an object with the real hand. For collection, enter the number and names of classes; the program prompts for three grasps per class. Use a new dataset name for each experiment. For recognition, press Enter at the dataset prompt to use the included `initial_9` dataset. The class names come from your terminal input and do not need entries in `Proprioception.objects` or STEP files. Collection and recognition require the real hand and a configured `Connection.Port`; training from saved trials does not connect to hardware. Changing the grip, motor IDs, or angle offsets requires new physical training trials.
+
+The included [`initial_9`](Data/Proprioception/Physical_Only/initial_9/) dataset contains three grasps each of a **7.5 cm side cube**, **7.5 cm diameter sphere**, and **5.0 cm diameter cylinder**, with their full `log.csv` traces. The saved `model.json` contains the nine reference angles. Leave-one-trial-out testing identifies **9/9** supplied trials correctly. This tests repeat grasps of those exact objects and sizes; it does not establish shape recognition across new sizes, placements, or objects. A real recognition run saves its own grasp files and result in a timestamped `runs/` folder under the selected dataset.
+
+These trials also show a sim-to-real gap. At the measured sizes, mean real minus simulated angles differ by object: joint 8 is about **+7.4°** for the cube and **+7.2°** for the sphere, but **−0.5°** for the cylinder. Joint 5 is about **−2°** for all three. Using the average offset of two classes to correct the held-out class identifies only **4/9** trials by nearest simulated grasp, the same count as without correction. Using trial 1 of each class as its own offset identifies that class in all **6/6** remaining repeat trials, but those repeats have the same size. Transfer to other sizes remains untested.
 
 ### Outputs and adding an object
 
@@ -267,6 +282,7 @@ All experiment outputs are under [`Data/Proprioception/`](Data/Proprioception/):
 | `model.npz` | Weights, object metadata, reference grasps, and stored settings. |
 | `log.csv`, `grasp_results.csv` | Last physical grasp's state trace and final measured angles. |
 | `recognition_result.json` | Last physical run's timestamp, final angles, and prediction. |
+| `Physical_Only/initial_9/` | Nine labeled real grasps and the independent physical-only class model. |
 
 Training overwrites its generated CSVs and model; a physical run overwrites its last-run logs. To add a class, put a STEP file measured in millimetres in [`Data/Objects/`](Data/Objects/), add its metadata and reference size to `Proprioception.objects`, and retrain. Check that the object does not touch the hand at the initial pose and that the grasp fits the URDF limits. Retrain after changing STEP or URDF geometry: model loading checks many constants but does not hash those files.
 
@@ -295,10 +311,10 @@ Training overwrites its generated CSVs and model; a physical run overwrites its 
 
 ## Current limitations
 
-- `SimHand` is a kinematic MuJoCo viewer, not a dynamic motor model. The separate recognition simulator checks mesh collision, while the real grasp uses motor current; that sim-to-real difference still needs physical measurement.
+- `SimHand` is a kinematic MuJoCo viewer, not a dynamic motor model. The separate recognition simulator checks mesh collision, while the real grasp uses motor current. The nine real trials quantify a gap for three objects at one size each; correcting it across sizes still needs experiments.
 - The recognition data use one fixed object pose, one CAD model per class, and uniform scale variation. The model receives final joint angles only. Unknown-object detection has not been tested against a separate set of unseen classes.
 - Vision calibration constants are local to the vision scripts, and `LeapKinematics.JOINT_LIMITS` have not yet been updated to match the widened URDF limits at joints 0, 8, 13, and 14.
 - The direct-angle vision script's preview/Q-key exit is currently commented out. The motion-teaching script's combined menu option is currently broken; its separate stages work as the intended route.
 - `test1.py` is a manual state display, not an automated test suite. The GUI's mock fallback is useful for editing poses but cannot verify physical motion.
 
-The included manuscript documents the current simulated recognition results and identifies real-hand validation as the next research step.
+The included manuscript documents the simulated recognition study. The new physical-only baseline and nine real trials have not yet been incorporated into that manuscript.

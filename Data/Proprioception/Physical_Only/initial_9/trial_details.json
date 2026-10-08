@@ -1,0 +1,18 @@
+{
+  "source": "Nine physical trials supplied by the project author",
+  "trials_per_class": 3,
+  "objects": {
+    "cube": {
+      "size_name": "side_length",
+      "size_m": 0.075
+    },
+    "sphere": {
+      "size_name": "diameter",
+      "size_m": 0.075
+    },
+    "cylinder": {
+      "size_name": "diameter",
+      "size_m": 0.05
+    }
+  }
+}

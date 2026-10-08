@@ -78,3 +78,9 @@ class Proprioception:
     recognition_result_path = "Data/Proprioception/recognition_result.json"
 
     viewer_refresh_s = 1 / 60
+
+
+class PhysicalOnly:
+    data_folder = "Data/Proprioception/Physical_Only"
+    default_dataset_name = "initial_9"
+    trials_per_class = 3
