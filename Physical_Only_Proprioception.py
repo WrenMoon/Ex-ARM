@@ -162,13 +162,18 @@ def recognize(name):
     output = dict(time_utc=timestamp.isoformat(), dataset=name,
                   final_angles_deg=angles, prediction=result)
     (run_folder / "recognition_result.json").write_text(json.dumps(output, indent=2) + "\n")
-    print(f"Object: {result['class_name']}")
-    print(f"Nearest physical trial: {result['class_name']} {result['nearest_trial']}")
-    print(f"Angle distance: {result['distance_deg']:.2f} degrees")
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    print("\n" + "=" * 60)
+    print(BOLD + f"FINAL RESULT: {result['class_name']}".center(60) + RESET)
+    print("=" * 60 + "\n")
+    # print(f"Nearest physical trial: {result['class_name']} {result['nearest_trial']}")
+    # print(f"Angle distance: {result['distance_deg']:.2f} degrees")
     print(f"Result saved to {run_folder}")
     return output
 
-
+3
 def ask_dataset_name(new=False):
     if new:
         name = input("New dataset name: ").strip()

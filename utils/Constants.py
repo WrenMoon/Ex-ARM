@@ -29,7 +29,7 @@ class Proprioception:
         max_currents=[22, 80, 30, 20,
                       22, 80, 30, 20,
                       22, 80, 30, 20,
-                      25, 70, 30, 20],
+                      27, 70, 30, 20],
     )
 
     settle_time_s = 2
