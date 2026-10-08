@@ -26,6 +26,7 @@ def recognize(leap_hand, model):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(output, indent=2) + "\n")
     print(f"Result saved to {path}")
+    print(result)
     return output
 
 

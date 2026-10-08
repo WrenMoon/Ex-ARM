@@ -1,5 +1,5 @@
 class Connection:
-    mode = "sim"
+    mode = "both"
     # Port = "/dev/cu.usbserial-FTBEQQVR"
     Port = "COM3"
     baudrate = 4000000
@@ -27,7 +27,7 @@ class Proprioception:
                     1, 1, 1, 1,
                     1, -1, 1, 1],
         max_currents=[22, 80, 25, 20,
-                      22, 80, 25, 20,
+                      22, 80, 30, 20,
                       22, 80, 25, 20,
                       25, 70, 25, 20],
     )

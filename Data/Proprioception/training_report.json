@@ -1,6 +1,6 @@
 {
-  "validation_accuracy": 0.8,
-  "validation_size_mae_mm": 0.8322495397390972,
+  "validation_accuracy": 0.7333333333333333,
+  "validation_size_mae_mm": 0.9414637000116695,
   "accepted_count": 3,
   "accepted_correct": 3,
   "validation_count": 15,
