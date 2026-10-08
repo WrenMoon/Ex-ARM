@@ -1,6 +1,6 @@
 {
-  "validation_accuracy": 0.7333333333333333,
-  "validation_size_mae_mm": 0.9414637000116695,
+  "validation_accuracy": 0.8666666666666667,
+  "validation_size_mae_mm": 1.0186890543855769,
   "accepted_count": 3,
   "accepted_correct": 3,
   "validation_count": 15,
@@ -40,6 +40,7 @@
     "network_hidden_size": 32,
     "network_learning_rate": 0.02,
     "noisy_samples_per_grasp": 50,
+    "normalization": "ignore_fixed_joints",
     "objects": [
       {
         "class_name": "cube",

@@ -12,6 +12,7 @@ from utils.Constants import Proprioception
 def model_settings():
     grip = Proprioception.grip
     return json.dumps(dict(
+        normalization="ignore_fixed_joints",
         start_angles=grip["start_angles"], max_angles=grip["max_angles"],
         step_sizes=grip["step_sizes"], objects=Proprioception.objects,
         mount_translation_m=Proprioception.mount_translation_m,
@@ -38,7 +39,8 @@ def normalize_angles(angles):
         raise ValueError("Expected 16 finite final joint angles")
     start = np.asarray(Proprioception.grip["start_angles"], dtype=float)
     span = np.asarray(Proprioception.grip["max_angles"], dtype=float) - start
-    span[span == 0] = 1
+    # Fixed joints contain no simulated object information.
+    span[span == 0] = np.inf
     return (angles - start) / span
 
 

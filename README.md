@@ -226,7 +226,7 @@ Physical object -> current-limited grasp -> measured final angles
 
 ### Simulated grasps
 
-[`utils/ProprioceptionSimulation.py`](utils/ProprioceptionSimulation.py) imports STEP geometry with CadQuery, converts millimetres to metres, adds a fixed object body and explicit contact pairs to the hand model, and replays the grasp configured in `Proprioception.grip`. The default scale sweep runs from **150% down to 50% in 5% steps**, giving 21 sizes for each of the three objects and 63 scenes. The cube's target size is its **side length**; sphere and cylinder targets are **radius**. All dimensions scale uniformly.
+[`utils/ProprioceptionSimulation.py`](utils/ProprioceptionSimulation.py) imports STEP geometry with CadQuery, converts millimetres to metres, adds a fixed object body and explicit contact pairs to the hand model, and replays the grasp configured in `Proprioception.grip`. The default scale sweep runs from **150% down to 50% in 5% steps**, giving 21 sizes for each of the three objects and 63 scenes. The cube's target size is its **side length**; sphere and cylinder targets are **diameter**. All dimensions scale uniformly.
 
 The grasp advances each active finger by its configured angle step. Contact on any link stops **all four joints of that finger**; other fingers keep moving. A finger can also finish at its angle target. MuJoCo refines contact to the last clear pose and records the final angles and every intermediate step. It sets positions directly rather than simulating motor dynamics or current. The older `Data/Objects/config.json` is not read by this pipeline; object definitions, mount pose, sweep, offsets, and grasp values are in [`utils/Constants.py`](utils/Constants.py).
 
@@ -238,11 +238,11 @@ This command regenerates the simulated grasp files, trains the model, and prints
 
 ### Model and validation
 
-[`utils/ProprioceptionModel.py`](utils/ProprioceptionModel.py) normalizes the 16 final angles by the configured grasp spans. A fully connected **32-unit tanh layer** feeds three class logits and one continuous scale output: **676 trainable parameters** for the three current classes. Predicted physical size is the scale factor multiplied by that class's reference size.
+[`utils/ProprioceptionModel.py`](utils/ProprioceptionModel.py) normalizes final angles by the configured grasp spans; joints that do not move in simulation are ignored so their encoder variation cannot dominate the distance check. A fully connected **32-unit tanh layer** feeds three class logits and one continuous scale output: **676 trainable parameters** for the three current classes. Predicted physical size is the scale factor multiplied by that class's reference size.
 
 Training uses NumPy/Adam, class cross-entropy plus scale squared error, and 50 noisy copies per simulated grasp with 0.5° Gaussian angle noise by default. Every fifth scale is excluded from the validation model's training data. A final model is then fitted using all 63 simulated sizes. An `unknown` result is a rule-based rejection if a grasp is distant from references, has low class probability, disagrees with the nearest reference class, or is too similar to another class.
 
-The checked-in report records **13/15 (86.7%) raw class predictions correct** and **1.36 mm** mean absolute size error on held-out simulated sizes. The rejection rule accepted **5/15**, all with the correct class. Its distance threshold was derived using those same held-out sizes, so accepted/rejected results are descriptive rather than an independent test of novel-object detection. No labeled real-hand recognition results are in the repository.
+The checked-in report records **13/15 (86.7%) raw class predictions correct** and **1.02 mm** mean absolute size error on held-out simulated sizes. The rejection rule accepted **3/15**, all with the correct class. Its distance threshold was derived using those same held-out sizes, so accepted/rejected results are descriptive rather than an independent test of novel-object detection. No labeled real-hand recognition results are in the repository.
 
 ### Physical recognition
 

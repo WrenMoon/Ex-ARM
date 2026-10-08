@@ -28,9 +28,9 @@ each grasp, collision stops all four joints of a contacted finger. The
 resulting 16 final joint angles train a small neural network to classify
 shape and regress scale; a separate rule rejects ambiguous or distant
 grasps as unknown. On 15 held-out simulated sizes, the network correctly
-classified 13 (86.7\%) and achieved a 1.36\,mm mean absolute
+classified 13 (86.7\%) and achieved a 1.02\,mm mean absolute
 ground-truth-dimension-weighted scale error. The rejection rule accepted
-five of these 15 grasps, all correctly classified. The physical-hand
+three of these 15 grasps, all correctly classified. The physical-hand
 program implements the corresponding grasp using motor current as a
 contact proxy, but this manuscript reports no physical-hand recognition
 trials. The results establish a simulation baseline for joint-angle-only
@@ -101,9 +101,9 @@ expanded to admit the configured grasp; no simulation-to-hardware angle
 offset is currently applied.
 
 Three STEP models are used: a cube, sphere, and cylinder. The reference
-cube side length is 50\,mm. The reference radius is 25\,mm for both the
+cube side length is 50\,mm. The reference diameter is 50\,mm for both the
 sphere and cylinder. Every object is fixed at the same pose relative
-to the simulation frame: translation $(-0.060,-0.048,-0.035)$\,m and
+to the simulation frame: translation $(-0.060,-0.037,-0.035)$\,m and
 roll--pitch--yaw orientation $(-180^\circ,0^\circ,0^\circ)$. STEP
 coordinates are treated as millimetres, converted to metres, and
 multiplied by a uniform scale factor. The same factor changes every
@@ -120,8 +120,8 @@ Each class has 21 scales from 50\% to 150\%, inclusive.}
 Class & Predicted quantity & Reference & Sweep range \\
 \midrule
 Cube & Side length & 50\,mm & 25--75\,mm \\
-Sphere & Radius & 25\,mm & 12.5--37.5\,mm \\
-Cylinder & Radius & 25\,mm & 12.5--37.5\,mm \\
+Sphere & Diameter & 50\,mm & 25--75\,mm \\
+Cylinder & Diameter & 50\,mm & 25--75\,mm \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -151,7 +151,7 @@ Finger & Start & Target & Increment \\
 Index & $[0,0,0,0]$ & $[-75,90,90,60]$ & $[-1,1,1,1]$ \\
 Middle & $[0,0,0,0]$ & $[0,80,80,65]$ & $[1,1,1,1]$ \\
 Ring & $[0,0,0,0]$ & $[75,90,90,60]$ & $[1,1,1,1]$ \\
-Thumb & $[0,180,0,0]$ & $[0,100,110,80]$ & $[1,-1,1,1]$ \\
+Thumb & $[0,180,40,25]$ & $[0,100,110,80]$ & $[1,-1,1,1]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -214,11 +214,14 @@ Positions, velocities, motor currents, fingertip trajectories, and
 per-step contact histories are not training features. Each angle is
 normalized by the configured grasp span:
 \begin{equation}
-x_j=\frac{q_j-a_j}{b_j-a_j},
+x_j=\begin{cases}
+\dfrac{q_j-a_j}{b_j-a_j}, & b_j\ne a_j,\\
+0, & b_j=a_j,
+\end{cases}
 \label{eq:normalization}
 \end{equation}
-where $a_j$ and $b_j$ are the start and target angles. For a joint with
-$a_j=b_j$, the implementation substitutes a denominator of one. The
+where $a_j$ and $b_j$ are the start and target angles. A fixed joint has
+no simulated variation from which to identify an object. The
 input $\mathbf x\in\mathbb R^{16}$ passes through a fully connected
 32-unit hyperbolic-tangent layer. The four output values consist of
 three class logits and one continuous predicted scale factor
@@ -272,7 +275,7 @@ The deployed output may instead be \texttt{unknown}. Four checks are
 applied in order. First, the Euclidean distance from the normalized
 input to its nearest simulated reference vector must not exceed a
 distance threshold. That threshold is 1.5 times the largest nearest
-training-scene distance of the 15 held-out scales (0.0697 for the
+training-scene distance of the 15 held-out scales (0.0754 for the
 present dataset). Second, the largest class probability must be at
 least 0.75. Third, the network class must agree with the class of
 the nearest simulated reference vector. Fourth, the difference
@@ -325,9 +328,9 @@ Ex-ARM project \citep{ExARM}.
 \label{sec:results}
 
 The generated dataset contains 63 completed simulated grasps and
-5993 recorded time-step rows, including the initial posture of each
-scene. Across the 252 finger endings (four per scene), 210 were
-attributed to object contact and 42 to reaching the configured
+5004 recorded time-step rows, including the initial posture of each
+scene. Across the 252 finger endings (four per scene), 241 were
+attributed to object contact and 11 to reaching the configured
 angle limits. These counts confirm that the simulated closing motion
 generated object contact in many finger trajectories; they are not a
 measure of recognition performance.
@@ -337,7 +340,7 @@ On the 15 scales excluded from the validation model's training set,
 \ref{tab:validation} shows results by class. Both raw errors were
 sphere-or-cylinder scenes predicted as cube. The scale-factor
 regression achieved the ground-truth-dimension-weighted MAE of
-1.36\,mm defined in Eq.~\eqref{eq:mae}.
+1.02\,mm defined in Eq.~\eqref{eq:mae}.
 
 \begin{table}[ht]
 \centering
@@ -350,20 +353,21 @@ held-out scales.}
 \toprule
 True class & Scenes & Raw class correct & Accepted (correct) \\
 \midrule
-Cube & 5 & 5 & 3 (3) \\
+Cube & 5 & 5 & 1 (1) \\
 Sphere & 5 & 4 & 1 (1) \\
 Cylinder & 5 & 4 & 1 (1) \\
 \midrule
-Total & 15 & 13 & 5 (5) \\
+Total & 15 & 13 & 3 (3) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The unknown-output rule rejected 10 of the 15 held-out grasps: five
-because the two nearest classes had similar angle vectors and five
-because the network's maximum class probability was below 0.75.
-All five accepted grasps had the correct class, but the acceptance
-rate was only one third. Since the threshold was set using these
+The unknown-output rule rejected 12 of the 15 held-out grasps: four
+because the two nearest classes had similar angle vectors, seven
+because the network's maximum class probability was below 0.75, and
+one because the network and nearest reference class disagreed.
+All three accepted grasps had the correct class, but the acceptance
+rate was only one fifth. Since the threshold was set using these
 same held-out sizes and no novel object class was tested, this
 result cannot establish real-world unknown-object detection.
 
@@ -415,8 +419,8 @@ This study implements active object recognition with a LEAP Hand
 using only final joint angles. With a fixed object pose and 63 simulated
 grasps across cube, sphere, and cylinder models, a 676-parameter
 network classified 13 of 15 held-out sizes correctly and achieved
-1.36\,mm mean absolute scale-regression error in the reported size
-units. A rule-based unknown output accepted five held-out grasps,
+1.02\,mm mean absolute scale-regression error in the reported size
+units. A rule-based unknown output accepted three held-out grasps,
 all correctly classified, at low coverage. These are simulation
 results. The corresponding physical current-limited grasp and
 inference code are available for experimental measurement, but the
