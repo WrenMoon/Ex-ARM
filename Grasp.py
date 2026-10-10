@@ -7,13 +7,13 @@ import time
 from utils.Constants import Connection, Proprioception
 
 
-def grasp(leap_hand, on_angles=None):
-    grip = Proprioception.grip1
+def grasp_one(leap_hand, grip, grip_number, on_angles=None):
     current_positions = grip["start_angles"].copy()
     stopped_fingers = [False] * 4
     log = []
     read_failures = 0
 
+    print(f"Starting grip {grip_number}/{len(Proprioception.grip)}")
     leap_hand.set_torque_enabled(True)
     leap_hand.set_goal_positions_degree(current_positions)
     time.sleep(Proprioception.settle_time_s)
@@ -74,12 +74,12 @@ def grasp(leap_hand, on_angles=None):
             )
 
         leap_hand.set_goal_positions_degree(current_positions)
-        log.append([time.time(), [float(value) for value in positions],
+        log.append([grip_number, time.time(), [float(value) for value in positions],
                     [float(value) for value in velocities],
                     [float(value) for value in currents]])
 
         if all(stopped_fingers):
-            print("Grasp Completed")
+            print(f"Grip {grip_number} completed")
             break
         time.sleep(Proprioception.step_time_s)
     else:
@@ -108,24 +108,45 @@ def grasp(leap_hand, on_angles=None):
     final_positions = [float(value) for value in final_state[0]]
     if on_angles is not None:
         on_angles(final_positions)
-    log.append([time.time(), final_positions,
+    log.append([grip_number, time.time(), final_positions,
                 [float(value) for value in final_state[1]],
                 [float(value) for value in final_state[2]]])
+
+    return final_positions, log
+
+
+def grasp(leap_hand, on_angles=None, on_grip=None):
+    if not Proprioception.grip:
+        raise ValueError("Add at least one grip to Proprioception.grip")
+    for grip_number, grip in enumerate(Proprioception.grip, 1):
+        for key in ("start_angles", "max_angles", "step_sizes", "max_currents"):
+            if len(grip[key]) != 16:
+                raise ValueError(f"Grip {grip_number} needs 16 {key}")
+    final_angles = []
+    log = []
+    for grip_number, grip in enumerate(Proprioception.grip, 1):
+        if on_grip is not None:
+            on_grip(grip_number)
+        angles, grip_log = grasp_one(leap_hand, grip, grip_number, on_angles)
+        final_angles.extend(angles)
+        log.extend(grip_log)
+    print("All grips completed")
 
     output_folder = Path(Proprioception.data_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
     with open(Proprioception.grasp_log_path, "w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["time", "positions", "velocities", "currents"])
-        for timestamp, positions, velocities, currents in log:
-            writer.writerow([timestamp, json.dumps(positions), json.dumps(velocities), json.dumps(currents)])
+        writer.writerow(["grip", "time", "positions", "velocities", "currents"])
+        for grip_number, timestamp, positions, velocities, currents in log:
+            writer.writerow([grip_number, timestamp, json.dumps(positions),
+                             json.dumps(velocities), json.dumps(currents)])
 
     with open(Proprioception.grasp_result_path, "w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow([f"joint_{joint}" for joint in range(16)])
-        writer.writerow(final_positions)
+        writer.writerow([f"joint_{joint}" for joint in range(len(final_angles))])
+        writer.writerow(final_angles)
 
-    return final_positions
+    return final_angles
 
 
 def main():

@@ -485,8 +485,13 @@ class JointStrip(tk.Canvas):
 
     def __init__(self, parent, height=118):
         super().__init__(parent, height=px(height), bg=CARD, highlightthickness=0, bd=0)
-        self.angles = list(Proprioception.grip["start_angles"])
+        self.angles = list(Proprioception.grip[0]["start_angles"])
+        self.grip_number = 1
         self.bind("<Configure>", lambda event: self.draw())
+
+    def set_grip(self, grip_number):
+        self.grip_number = grip_number
+        self.draw()
 
     def set(self, angles):
         if len(angles) == 16:
@@ -494,8 +499,9 @@ class JointStrip(tk.Canvas):
             self.draw()
 
     def closure(self, joint):
-        start = Proprioception.grip["start_angles"][joint]
-        end = Proprioception.grip["max_angles"][joint]
+        grip = Proprioception.grip[self.grip_number - 1]
+        start = grip["start_angles"][joint]
+        end = grip["max_angles"][joint]
         if end == start:
             return 0.0
         return max(0.0, min(1.0, (self.angles[joint] - start) / (end - start)))
@@ -667,7 +673,7 @@ class HandView(tk.Canvas):
             self.data = mujoco.MjData(self.model)
             self.camera = mujoco.MjvCamera()
             self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
-            self.data.qpos[:] = np.radians(Proprioception.grip["start_angles"])[self.joint_order]
+            self.data.qpos[:] = np.radians(Proprioception.grip[0]["start_angles"])[self.joint_order]
             mujoco.mj_forward(self.model, self.data)
             low, high = self.data.geom_xpos.min(axis=0), self.data.geom_xpos.max(axis=0)
             self.center = (low + high) / 2
@@ -1126,7 +1132,7 @@ class PhysicalOnlyUI:
                     kind="secondary").pack(fill="x", pady=(px(14), px(4)))
 
         neural = Card(page, "Neural classifier",
-                      f"16 joint angles → {PhysicalOnly.network_hidden_size} tanh units → "
+                      f"{16 * len(Proprioception.grip)} joint readings → {PhysicalOnly.network_hidden_size} tanh units → "
                       f"softmax, with {PhysicalOnly.network_noisy_copies} noisy copies per grasp.")
         neural.pack(fill="x")
         row = tk.Frame(neural.body, bg=CARD)
@@ -1587,7 +1593,8 @@ class PhysicalOnlyUI:
                 return
 
             def work():
-                result = collect_one_trial(name, on_angles=self.queue_angles)
+                result = collect_one_trial(name, on_angles=self.queue_angles,
+                                           on_grip=self.queue_grip)
                 if result["remaining"] == 0:
                     train_dataset(name)
                 return result
@@ -1655,7 +1662,8 @@ class PhysicalOnlyUI:
                               "Start grasp"):
                 return
             self.run_job("Nearest-trial grasp",
-                         lambda: recognize_once(name, on_angles=self.queue_angles),
+                         lambda: recognize_once(name, on_angles=self.queue_angles,
+                                                on_grip=self.queue_grip),
                          self.nearest_result, live=True)
         except (OSError, ValueError, FileNotFoundError) as error:
             self.error("Recognize", error)
@@ -1720,13 +1728,14 @@ class PhysicalOnlyUI:
     def neural_step(self, session, number):
         hand = open_hand()
         try:
-            angles = grasp(hand, on_angles=self.queue_angles)
-            grasp_folder = session["folder"] / f"grasp_{number}"
             try:
+                angles = grasp(hand, on_angles=self.queue_angles, on_grip=self.queue_grip)
+                grasp_folder = session["folder"] / f"grasp_{number}"
                 save_grasp(grasp_folder)
             finally:
                 release_hand(hand)
-                self.queue_angles(Proprioception.grip["start_angles"])
+                self.queue_angles(Proprioception.grip[0]["start_angles"])
+                self.queue_grip(1)
         finally:
             hand.close()
         model = session["model"]
@@ -1774,6 +1783,9 @@ class PhysicalOnlyUI:
     def queue_angles(self, angles):
         self.events.put(("angles", list(angles)))
 
+    def queue_grip(self, grip_number):
+        self.events.put(("grip", grip_number))
+
     def run_job(self, label, work, finished, live=False):
         if self.busy:
             self.set_status("Wait for the current operation to finish", "warn")
@@ -1796,6 +1808,8 @@ class PhysicalOnlyUI:
                 if kind == "angles":
                     self.preview.set_pose(value)
                     self.joints.set(value)
+                elif kind == "grip":
+                    self.joints.set_grip(value)
                 elif kind == "done":
                     self.set_busy(False)
                     callback, result = value

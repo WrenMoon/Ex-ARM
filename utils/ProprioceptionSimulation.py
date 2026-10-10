@@ -130,8 +130,7 @@ class GraspSimulation:
                 fingers.add(-1)
         return fingers
 
-    def grasp(self):
-        grip = Proprioception.grip
+    def grasp_one(self, grip, grip_number):
         angles = np.asarray(grip["start_angles"], dtype=float).copy()
         targets = np.asarray(grip["max_angles"], dtype=float)
         increments = np.asarray(grip["step_sizes"], dtype=float)
@@ -151,7 +150,7 @@ class GraspSimulation:
 
         stopped_fingers = [False] * 4
         stop_reasons = [""] * 4
-        self.trace = [(0, angles.copy(), stop_reasons.copy())]
+        self.trace.append((grip_number, 0, angles.copy(), stop_reasons.copy()))
         for step in range(Proprioception.max_grasp_steps):
             for finger in range(4):
                 if stopped_fingers[finger]:
@@ -191,10 +190,22 @@ class GraspSimulation:
                     if np.allclose(angles[joints], targets[joints], atol=1e-6):
                         stopped_fingers[finger] = True
                         stop_reasons[finger] = "angle_limit"
-            self.trace.append((step + 1, angles.copy(), stop_reasons.copy()))
+            self.trace.append((grip_number, step + 1, angles.copy(), stop_reasons.copy()))
             if all(stopped_fingers):
                 return angles, stop_reasons
         raise RuntimeError("Simulation grasp exceeded the maximum number of steps")
+
+    def grasp(self):
+        if not Proprioception.grip:
+            raise ValueError("Add at least one grip to Proprioception.grip")
+        self.trace = []
+        all_angles = []
+        all_reasons = []
+        for grip_number, grip in enumerate(Proprioception.grip, 1):
+            angles, reasons = self.grasp_one(grip, grip_number)
+            all_angles.extend(angles)
+            all_reasons.extend(reasons)
+        return all_angles, all_reasons
 
 
 def run_simulations():
@@ -203,8 +214,12 @@ def run_simulations():
     steps_path = Path(Proprioception.training_steps_path)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     steps_path.parent.mkdir(parents=True, exist_ok=True)
-    angle_columns = [f"joint_{joint}" for joint in range(16)]
-    stop_columns = [f"finger_{finger}_stop" for finger in range(4)]
+    angle_columns = [f"joint_{joint}" for joint in range(16 * len(Proprioception.grip))]
+    stop_columns = [f"grip_{grip}_finger_{finger}_stop"
+                    for grip in range(1, len(Proprioception.grip) + 1)
+                    for finger in range(4)]
+    step_angles = [f"joint_{joint}" for joint in range(16)]
+    step_stops = [f"finger_{finger}_stop" for finger in range(4)]
 
     with summary_path.open("w", newline="") as summary_file, \
             steps_path.open("w", newline="") as steps_file:
@@ -212,8 +227,8 @@ def run_simulations():
         steps_writer = csv.writer(steps_file)
         summary_writer.writerow(["class", "size_name", "size_m", "scale_percent"]
                                 + angle_columns + stop_columns)
-        steps_writer.writerow(["class", "size_name", "size_m", "scale_percent", "step"]
-                              + angle_columns + stop_columns)
+        steps_writer.writerow(["class", "size_name", "size_m", "scale_percent",
+                               "grip", "step"] + step_angles + step_stops)
 
         for object_info in Proprioception.objects:
             for scale_percent in object_scales():
@@ -224,11 +239,11 @@ def run_simulations():
                        size_m, scale_percent, *angles, *stop_reasons]
                 summary_writer.writerow(row)
                 rows.append(row)
-                for step, step_angles, step_reasons in simulation.trace:
+                for grip_number, step, angles_at_step, step_reasons in simulation.trace:
                     steps_writer.writerow([object_info["class_name"],
                                            object_info["size_name"], size_m,
-                                           scale_percent, step,
-                                           *step_angles, *step_reasons])
+                                           scale_percent, grip_number, step,
+                                           *angles_at_step, *step_reasons])
                 summary_file.flush()
                 steps_file.flush()
                 print(f"{object_info['class_name']} at {scale_percent}%: {stop_reasons}")

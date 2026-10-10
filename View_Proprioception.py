@@ -18,16 +18,24 @@ def load_training_steps():
         raise FileNotFoundError("Run Train_Proprioception.py to record the training grasps first")
     scenarios = {}
     with path.open(newline="") as file:
-        for row in csv.DictReader(file):
+        reader = csv.DictReader(file)
+        if "grip" not in (reader.fieldnames or []):
+            raise ValueError("Training steps use an older grip format; rerun training")
+        for row in reader:
             key = (row["class"], int(float(row["scale_percent"])))
             angles = np.asarray([float(row[f"joint_{joint}"]) for joint in range(16)])
             reasons = [row[f"finger_{finger}_stop"] for finger in range(4)]
-            scenarios.setdefault(key, []).append((int(row["step"]), angles, reasons))
+            scenarios.setdefault(key, []).append((int(row["grip"]), int(row["step"]),
+                                                  angles, reasons))
     if not scenarios:
         raise ValueError("No recorded training steps found")
     for key, frames in scenarios.items():
-        if [frame[0] for frame in frames] != list(range(len(frames))):
-            raise ValueError(f"Incomplete training step sequence for {key}")
+        for grip_number in range(1, len(Proprioception.grip) + 1):
+            steps = [frame[1] for frame in frames if frame[0] == grip_number]
+            if steps != list(range(len(steps))) or not steps:
+                raise ValueError(f"Incomplete training steps for {key}, grip {grip_number}")
+        if [frame[0] for frame in frames] != sorted(frame[0] for frame in frames):
+            raise ValueError(f"Training grips are out of order for {key}")
     return scenarios
 
 
@@ -67,7 +75,7 @@ def show_scenario(key, frames):
     object_info = next(entry for entry in Proprioception.objects
                        if entry["class_name"] == name)
     simulation = GraspSimulation(object_info, scale)
-    simulation.set_angles(frames[0][1])
+    simulation.set_angles(frames[0][2])
     keys = SimpleQueue()
     frame_index = 0
     playing = True
@@ -122,10 +130,10 @@ def show_scenario(key, frames):
                     playing = False
             if changed:
                 with viewer.lock():
-                    simulation.set_angles(frames[frame_index][1])
-                step, _, reasons = frames[frame_index]
+                    simulation.set_angles(frames[frame_index][2])
+                grip_number, step, _, reasons = frames[frame_index]
                 if frame_index == len(frames) - 1 or not playing:
-                    print(f"Step {step}: {reasons}")
+                    print(f"Grip {grip_number}, step {step}: {reasons}")
             viewer.sync()
             time.sleep(Proprioception.viewer_refresh_s)
     return "menu"

@@ -10,11 +10,9 @@ from utils.Constants import Proprioception
 
 
 def model_settings():
-    grip = Proprioception.grip
     return json.dumps(dict(
         normalization="ignore_fixed_joints",
-        start_angles=grip["start_angles"], max_angles=grip["max_angles"],
-        step_sizes=grip["step_sizes"], objects=Proprioception.objects,
+        grips=Proprioception.grip, objects=Proprioception.objects,
         mount_translation_m=Proprioception.mount_translation_m,
         mount_rotation_rpy_deg=Proprioception.mount_rotation_rpy_deg,
         sim_joint_offsets_deg=Proprioception.sim_joint_offsets_deg,
@@ -35,10 +33,14 @@ def model_settings():
 
 def normalize_angles(angles):
     angles = np.asarray(angles, dtype=float)
-    if angles.shape[-1] != 16 or not np.isfinite(angles).all():
-        raise ValueError("Expected 16 finite final joint angles")
-    start = np.asarray(Proprioception.grip["start_angles"], dtype=float)
-    span = np.asarray(Proprioception.grip["max_angles"], dtype=float) - start
+    count = 16 * len(Proprioception.grip)
+    if not Proprioception.grip or angles.shape[-1] != count or not np.isfinite(angles).all():
+        raise ValueError(f"Expected {count} finite final joint angles")
+    start = np.asarray([angle for grip in Proprioception.grip
+                        for angle in grip["start_angles"]], dtype=float)
+    targets = np.asarray([angle for grip in Proprioception.grip
+                          for angle in grip["max_angles"]], dtype=float)
+    span = targets - start
     # Fixed joints contain no simulated object information.
     span[span == 0] = np.inf
     return (angles - start) / span
@@ -52,12 +54,13 @@ class ProprioceptionModel:
         self.reference_sizes = np.asarray([entry["reference_size_m"] for entry in classes])
         rng = np.random.default_rng(Proprioception.random_seed)
         hidden = Proprioception.network_hidden_size
-        self.weights1 = rng.normal(0, np.sqrt(2 / 16), (16, hidden))
+        inputs = 16 * len(Proprioception.grip)
+        self.weights1 = rng.normal(0, np.sqrt(2 / inputs), (inputs, hidden))
         self.bias1 = np.zeros(hidden)
         self.weights2 = rng.normal(0, np.sqrt(2 / hidden), (hidden, len(classes) + 1))
         self.bias2 = np.zeros(len(classes) + 1)
         self.bias2[-1] = 1  # The middle of the scale sweep is 100%.
-        self.reference_angles = np.zeros((0, 16))
+        self.reference_angles = np.zeros((0, inputs))
         self.reference_labels = np.zeros(0, dtype=int)
         self.unknown_distance = 0
 
@@ -113,8 +116,9 @@ class ProprioceptionModel:
 
     def predict(self, angles):
         angles = np.asarray(angles, dtype=float)
-        if angles.shape != (16,):
-            raise ValueError("Expected 16 final joint angles")
+        inputs = 16 * len(Proprioception.grip)
+        if angles.shape != (inputs,):
+            raise ValueError(f"Expected {inputs} final joint angles")
         if len(self.reference_angles) == 0:
             raise ValueError("Model has no simulated reference grasps")
         if len(self.reference_labels) != len(self.reference_angles):
@@ -187,11 +191,14 @@ class ProprioceptionModel:
 
 def load_simulations(path=None):
     with open(path or Proprioception.simulation_path, newline="") as file:
-        rows = list(csv.DictReader(file))
+        reader = csv.DictReader(file)
+        columns = [f"joint_{joint}" for joint in range(16 * len(Proprioception.grip))]
+        if not set(columns).issubset(reader.fieldnames or []):
+            raise ValueError("Simulation CSV has the wrong number of grips; rerun training")
+        rows = list(reader)
     if not rows:
         raise ValueError("No simulated grasps found")
-    angles = np.asarray([[float(row[f"joint_{joint}"]) for joint in range(16)]
-                         for row in rows])
+    angles = np.asarray([[float(row[column]) for column in columns] for row in rows])
     class_names = [entry["class_name"] for entry in Proprioception.objects]
     labels = np.asarray([class_names.index(row["class"]) for row in rows])
     factors = np.asarray([float(row["scale_percent"]) / 100 for row in rows])
@@ -254,7 +261,7 @@ def train_model():
         writer = csv.writer(file)
         writer.writerow(["class", "scale_percent", "size_m", "network_class",
                          "network_confidence", "result_class", "result_size_m",
-                         "unknown_reason"] + [f"joint_{joint}" for joint in range(16)])
+                         "unknown_reason"] + [f"joint_{joint}" for joint in range(16 * len(Proprioception.grip))])
         for row, label, factor, probabilities_row, result in zip(
                 angles[validation], labels[validation], factors[validation],
                 probabilities, validation_results):
@@ -271,7 +278,7 @@ def train_model():
     with samples_path.open("w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(["stage", "class", "size_name", "size_m", "scale_percent"]
-                        + [f"joint_{joint}" for joint in range(16)])
+                        + [f"joint_{joint}" for joint in range(16 * len(Proprioception.grip))])
         for stage, sample_angles, sample_labels, sample_factors in (
                 ("validation_model", noisy_angles, noisy_labels, noisy_factors),
                 ("final_model", all_angles, all_labels, all_factors)):

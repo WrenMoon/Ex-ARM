@@ -2,7 +2,7 @@
 
 Ex-ARM is a Python repository for controlling a 16-joint LEAP Hand and studying what the hand can learn from its own joint angles. It includes a Dynamixel hardware interface, a MuJoCo hand viewer, hand kinematics, webcam control, pose and motion tools, and two object-recognition experiments:
 
-- **Physical-only recognition:** collect labeled real-hand grasps and identify an object's class from the final 16 joint angles. It offers a nearest-trial baseline and a small neural classifier.
+- **Physical-only recognition:** collect labeled real-hand trials and identify an object's class from the final angles of every configured grip. It offers a nearest-trial baseline and a small neural classifier.
 - **Simulation-trained recognition:** grasp fixed CAD objects across a size sweep in MuJoCo, train a class-and-size model, then apply the same grasp to the real hand. This is a separate experimental pipeline; its real-hand accuracy has not been established.
 
 The [manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object physical-only study and reports the available pilot data. The repository does not yet contain a completed 20-class dataset.
@@ -30,7 +30,7 @@ Start with `python Project.py`. The [project launcher](Project.py) groups the ex
 | --- | --- | --- |
 | Collect, resume, extend, train, or identify using physical trials | `python Physical_Only_Proprioception.py` | Real hand for collection and recognition; saved trials for training |
 | Open the physical-only presentation window | `python Physical_Only_UI.py` | Tkinter, MuJoCo for the hand preview, real hand for grasps |
-| Run and log one physical grasp | `python Grasp.py` | Real hand |
+| Run and log one sequence of configured physical grips | `python Grasp.py` | Real hand |
 | Generate CAD grasps and train the simulation model | `python Train_Proprioception.py` | MuJoCo, CadQuery; no real hand |
 | Browse recorded simulated grasps | `python View_Proprioception.py` | MuJoCo viewer and previous training output |
 | Identify class and size with the simulation-trained model | `python Run_Proprioception.py` | Trained simulation model and real hand |
@@ -67,7 +67,7 @@ Before a motor-control run, edit [utils/Constants.py](utils/Constants.py):
 
 1. Set `Connection.Port`, `baudrate`, `ids`, and `offsets` for your hand. The checked-in port is `COM3`, which is not a macOS serial-device name.
 2. Set `Connection.mode` to `"real"`, `"sim"`, or `"both"` for the general hand, pose, vision, and diagnostic tools. The checked-in value is `"both"`, so those tools attempt **both hardware and a MuJoCo viewer**.
-3. Check `Proprioception.grip` and its current limits before a grasp. `Grasp.py` and physical-only collection use this same grasp. `Run_Proprioception.py` requires `Proprioception.hand_mode = "real"`, as checked in.
+3. Check every entry of the ordered `Proprioception.grip` list and its current limits before a trial. `Grasp.py` and both recognition paths use this sequence. `Run_Proprioception.py` requires `Proprioception.hand_mode = "real"`, as checked in.
 4. Place objects at the same position and orientation for training and recognition. The simulation pipeline uses `Proprioception.mount_translation_m` and `mount_rotation_rpy_deg`; the physical-only pipeline relies on consistent real placement.
 
 ## Repository map
@@ -125,15 +125,15 @@ The hardware driver uses synchronized position writes and bulk reads of position
 
 ## The controlled physical grasp
 
-[Grasp.py](Grasp.py) implements the grasp shared by both recognition paths. It moves the hand to `Proprioception.grip["start_angles"]`, then advances all active fingers by the configured joint steps. For a moving joint, a signed current reading beyond `max_currents` stops **all four joints of that finger** at their measured positions. The other fingers continue until they contact or reach their configured target angles.
+[Grasp.py](Grasp.py) implements the grip sequence shared by both recognition paths. For each entry in `Proprioception.grip`, it moves the hand to that grip's `start_angles`, then advances all active fingers by its configured joint steps. For a moving joint, a signed current reading beyond `max_currents` stops **all four joints of that finger** at their measured positions. The other fingers continue until they contact or reach their configured target angles. It moves to the next grip's starting pose before running that grip.
 
-After completion, the program retries the final hand-state read for up to `final_read_timeout_s` if the hand momentarily stops reporting positions. It returns the measured final 16 angles and writes the latest trace to `Data/Proprioception/log.csv` and the final vector to `Data/Proprioception/grasp_results.csv`. These two top-level files are replaced by the next grasp. Physical-only collection copies and checks them inside the named trial folder immediately after each successful grasp.
+After each grip, the program retries the final hand-state read for up to `final_read_timeout_s` if the hand momentarily stops reporting positions. One trial returns the final angles concatenated in grip-list order: **16 × number of grips** values, currently 48. `Data/Proprioception/grasp_results.csv` has columns `joint_0` through `joint_47`; `log.csv` has a `grip` column (numbered from 1) and one 16-angle physical-hand state per row. These two top-level files are replaced by the next complete trial. Physical-only collection copies and checks them inside the named trial folder immediately after success. Hand commands, live UI poses, and per-frame simulation poses remain 16 angles because the hardware still has 16 joints.
 
 Use `python Grasp.py` to check this motion and log a grasp without running recognition. The physical-only **collection** workflow saves the result, commands the hand back to its starting angles, and waits before asking for the next object placement. The standalone `Grasp.py` and simulation-model runner do not perform that collection step.
 
 ## Physical-only object recognition
 
-This is the main workflow for a real-object class experiment. It uses **no CAD object models or simulated training grasps**. The input to either classifier is the final 16-angle vector produced by the shared physical grasp. It predicts a **class**, not object size.
+This is the main workflow for a real-object class experiment. It uses **no CAD object models or simulated training grasps**. The input to either classifier is the concatenated final-angle vector produced by the shared grip sequence. It predicts a **class**, not object size.
 
 ### Use: collect, resume, and extend a dataset
 
@@ -149,20 +149,21 @@ Run `python Physical_Only_Proprioception.py`, or choose **Physical-only object r
 | **6** | Train or retrain the physical-only neural classifier |
 | **7** | Identify with the neural classifier, with repeat grasps when needed |
 | **8** | Open the physical-only presentation UI |
+| **9** | Retake a saved trial; keep the original in `retaken/` |
 
-For a new study, choose a **new dataset name**, enter at least two class names and the desired number of grasps per class, and collect the prompted trials. One completed grasp is stored at `Data/Proprioception/Physical_Only/<dataset>/trials/<class>/<number>/` as `grasp_results.csv` plus the full `log.csv`. The program saves `collection.json` **before** collecting, so after an interruption you can choose option **1** and enter the same dataset name to resume. It skips complete trials and moves incomplete trial folders to `incomplete/` for inspection. After each saved collection trial, the hand is commanded open before the next placement prompt.
+For a new study, choose a **new dataset name**, enter at least two class names and the desired number of trials per class, and collect the prompted trials. One completed trial contains all configured grips and is stored at `Data/Proprioception/Physical_Only/<dataset>/trials/<class>/<number>/` as `grasp_results.csv` plus the full `log.csv`. The program saves `collection.json` **before** collecting, so after an interruption you can choose option **1** and enter the same dataset name to resume. It skips complete trials and moves incomplete trial folders to `incomplete/` for inspection. After each saved collection trial, the hand is commanded open before the next placement prompt. Press **R** at the follow-up prompt to retake that trial immediately, or use option **9** later to select a class and trial number.
 
 When all planned trials are present, option **1** trains `model.json` automatically. Choose **6 separately** to train `neural_model.npz`. To add data later, first finish any pending collection, then choose **5**. New trials or classes change the dataset: retrain the neural model before option **7**. Use a **new dataset** if you change the grasp, motor IDs, or offsets; the saved plan and models check these settings and reject incompatible measurements.
 
 The checked-in `initial_9` pilot has three real grasps each of a 7.5 cm side-length cube, a 7.5 cm diameter sphere, and a 5 cm diameter cylinder. `Household_1` contains four household classes (`ball`, `bottle`, `bowl`, `mouse`) and a nearest-trial model. These are pilots, not the proposed 20-object experiment.
 
-For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real grasps per class, train the neural model with option **6**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **5** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts currently selects `PhysicalOnly.default_dataset_name`, which is `initial_9` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
+For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real trials per class, train the neural model with option **6**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **5** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts selects `PhysicalOnly.default_dataset_name`, which is `multi_grip_study` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
 
 ### How it works: two class-only models
 
 **Nearest-trial baseline.** [Physical_Only_Proprioception.py](Physical_Only_Proprioception.py) saves all measured angle vectors in `model.json`. Prediction chooses the class of the saved vector with the smallest Euclidean distance in **degrees**. Its leave-one-trial-out report excludes each trial in turn when scoring that trial. This baseline has no probability or unknown-object decision: it always chooses one of its saved classes.
 
-**Neural classifier.** [PhysicalOnlyNetwork.py](utils/PhysicalOnlyNetwork.py) normalizes each angle by that joint's configured start-to-target span; joints with zero span contribute no normalized change. A dense **16 → 24 tanh → number-of-classes** network produces softmax class probabilities. Training uses NumPy and Adam, class balancing, weight decay, and, by default, 20 noisy copies plus the original of each real trial. The synthetic copies add both per-joint and shared-per-finger Gaussian angle noise. They help tolerance to small measurement changes but are not additional independent grasps.
+**Neural classifier.** [PhysicalOnlyNetwork.py](utils/PhysicalOnlyNetwork.py) normalizes each angle by its grip and joint's configured start-to-target span; joints with zero span contribute no normalized change. A dense **(16 × grips) → 24 tanh → number-of-classes** network produces softmax class probabilities. Training uses NumPy and Adam, class balancing, weight decay, and, by default, 20 noisy copies plus the original of each real trial. The synthetic copies add both per-joint and shared-per-finger Gaussian angle noise to every grip. They help tolerance to small measurement changes but are not additional independent grasps.
 
 The neural evaluation holds out **real trials before generating noise** in up to three folds. Validation loss selects training duration; a final model trains on all physical trials. Held-out logits set a probability temperature and held-out nearest-reference distances set the saved distance threshold. Training requires at least **three real trials per class**. The model saves a fingerprint of its physical samples and settings, and loading it asks for retraining if either changed.
 
@@ -197,7 +198,7 @@ This pipeline trains from [STEP objects](Data/Objects/) and the MuJoCo hand mode
 
 The checked-in sweep is **150% down to 50% in 5% increments**: 21 sizes for each of the cube, sphere, and cylinder, or 63 simulated grasps. The label `size_m` means **cube side length** for `cube` and **diameter** for `sphere` and `cylinder`. Each class's `reference_size_m` in `Proprioception.objects` is its size at 100%; changing it changes the size label, while replacing or rescaling the STEP file changes the actual simulated geometry. Check both together.
 
-[ProprioceptionModel.py](utils/ProprioceptionModel.py) normalizes final angles by grasp span, ignoring joints with no planned movement. Its dense **16 → 32 tanh → (classes + one scale output)** network predicts class probabilities and a continuous size factor. The reported size is that factor multiplied by the predicted class's reference size. NumPy/Adam minimizes class cross-entropy plus weighted squared scale error. Training adds 50 Gaussian-noise copies per simulated grasp by default.
+[ProprioceptionModel.py](utils/ProprioceptionModel.py) normalizes final angles by each grip's span, ignoring joints with no planned movement. Its dense **(16 × grips) → 32 tanh → (classes + one scale output)** network predicts class probabilities and a continuous size factor. The reported size is that factor multiplied by the predicted class's reference size. NumPy/Adam minimizes class cross-entropy plus weighted squared scale error. Training adds 50 Gaussian-noise copies per simulated trial by default.
 
 Every fifth size in the sweep is held out to measure interpolation to unseen simulated sizes; the final saved model then retrains on **all** simulated sizes. Recognition rejects a grasp as `unknown` if it is too far from reference angles, has low class probability, disagrees with the nearest reference class, or has similar distances to two classes. The distance threshold is derived from held-out **known** sizes, so this is not a validated novel-object detector.
 
@@ -275,7 +276,7 @@ The hand CAD files are in [Data/Leap_Model/](Data/Leap_Model/): `robot.urdf`, th
 | [Data/Proprioception/Physical_Only/](Data/Proprioception/Physical_Only/) | Named real-trial datasets, baseline/neural models, reports and saved inference runs | Physical-only terminal program and UI |
 | [Manuscript/](Manuscript/) | LaTeX research manuscript and build files | Research writing, separate from runtime code |
 
-Inside a physical dataset, `collection.json` is the planned classes, counts, grasp, motor IDs, and offsets. `trials/<class>/<number>/` contains immutable completed grasp records. `model.json` is the nearest-trial baseline. `neural_model.npz` and `neural_report.json` are the physical classifier and its held-out report. `runs/` holds nearest-trial recognition, while `neural_runs/` holds individual and combined neural recognition. The latest top-level `Data/Proprioception/log.csv` and `grasp_results.csv` are overwritten by the next grasp; the copied trial and run folders preserve earlier measurements.
+Inside a physical dataset, `collection.json` is the planned classes, counts, ordered grip list, motor IDs, and offsets. `trials/<class>/<number>/` contains completed trial records. Terminal option **9** retakes a saved trial: it verifies the replacement before moving the original into `retaken/<class>/`, then retrains the nearest-trial model. During terminal collection, **R** after saving a trial retakes it immediately. Retrain the neural model with option **6** after any retake. `model.json` is the nearest-trial baseline. `neural_model.npz` and `neural_report.json` are the physical classifier and its held-out report. `runs/` holds nearest-trial recognition, while `neural_runs/` holds individual and combined neural recognition. The latest top-level `Data/Proprioception/log.csv` and `grasp_results.csv` are overwritten by the next trial; the copied trial and run folders preserve earlier measurements.
 
 Inside `Data/Proprioception/`, simulation training writes `simulation.csv` (one final pose per object/scale), `training_steps.csv` (viewer frames), `training_samples.csv` (original and noisy model inputs), `validation.csv`, `training_report.json`, and `model.npz`. Physical inference with that model writes `recognition_result.json`. Re-running simulation training replaces its generated model and CSVs, so copy an experiment elsewhere first if you need to preserve a previous run.
 
@@ -287,7 +288,7 @@ Inside `Data/Proprioception/`, simulation training writes `simulation.csv` (one 
 | `Proprioception` | Shared grasp, current limits, timing and read retries; CAD objects and reference sizes; fixed mount and scale sweep; simulation noise, class-and-size network, rejection rules, and output paths |
 | `PhysicalOnly` | Dataset root and defaults; UI dimensions; physical-network training, noise, validation, rejection thresholds, and repeat-grasp limit |
 
-There are a few legacy local constants in the vision scripts, the pose runner, kinematics module, and `URDF_Convertor.py`; changing `Constants.py` does not update those automatically. If a saved model says the settings or physical trial fingerprint changed, retrain the corresponding model. In particular, change the grasp or motor calibration only with a **new physical dataset**.
+There are a few legacy local constants in the vision scripts, the pose runner, kinematics module, and `URDF_Convertor.py`; changing `Constants.py` does not update those automatically. If a saved model says the settings or physical trial fingerprint changed, retrain the corresponding model. Changing the number, order, or angles of the grips requires a **new physical dataset** and rerunning simulation training. The included pilot datasets and reports were recorded with a previous single-grip configuration and cannot train or run the current three-grip models; their reported results are historical.
 
 ## Known limits and troubleshooting
 

@@ -24,9 +24,9 @@ def dataset_folder(name):
 def read_angles(path):
     with open(path, newline="") as file:
         reader = csv.DictReader(file)
-        expected = [f"joint_{joint}" for joint in range(16)]
+        expected = [f"joint_{joint}" for joint in range(16 * len(Proprioception.grip))]
         if reader.fieldnames != expected:
-            raise ValueError(f"Expected 16 joint columns in {path}")
+            raise ValueError(f"Expected {len(expected)} joint columns in {path}")
         rows = list(reader)
     if len(rows) != 1:
         raise ValueError(f"Expected one grasp in {path}")
@@ -41,8 +41,9 @@ def distance(first, second):
 
 
 def predict(angles, samples):
-    if len(angles) != 16 or not all(math.isfinite(angle) for angle in angles):
-        raise ValueError("Expected 16 finite joint angles")
+    count = 16 * len(Proprioception.grip)
+    if len(angles) != count or not all(math.isfinite(angle) for angle in angles):
+        raise ValueError(f"Expected {count} finite joint angles")
     if not samples:
         raise ValueError("The model has no training trials")
     nearest = min(samples, key=lambda sample: distance(angles, sample["angles_deg"]))
@@ -92,16 +93,19 @@ def trial_complete(folder):
     try:
         angles = read_angles(folder / "grasp_results.csv")
         with open(folder / "log.csv", newline="") as file:
-            final_row = None
-            for final_row in csv.DictReader(file):
-                pass
-        if final_row is None:
+            rows = list(csv.DictReader(file))
+        last_by_grip = {}
+        for row in rows:
+            grip_number = int(row["grip"])
+            if grip_number not in range(1, len(Proprioception.grip) + 1):
+                return False
+            last_by_grip[grip_number] = json.loads(row["positions"])
+        if set(last_by_grip) != set(range(1, len(Proprioception.grip) + 1)):
             return False
-        logged_angles = json.loads(final_row["positions"])
-        return len(logged_angles) == 16 and all(
-            abs(first - float(second)) < 0.001
-            for first, second in zip(angles, logged_angles)
-        )
+        logged_angles = [angle for grip_number in sorted(last_by_grip)
+                         for angle in last_by_grip[grip_number]]
+        return len(logged_angles) == len(angles) and all(
+            abs(first - float(second)) < 0.001 for first, second in zip(angles, logged_angles))
     except (OSError, ValueError, TypeError, KeyError, csv.Error):
         return False
 
@@ -219,7 +223,7 @@ def save_grasp(folder):
 
 
 def release_hand(hand):
-    hand.set_goal_positions_degree(Proprioception.grip["start_angles"])
+    hand.set_goal_positions_degree(Proprioception.grip[0]["start_angles"])
     time.sleep(Proprioception.settle_time_s)
 
 
@@ -282,7 +286,7 @@ def prepare_trial(name, class_name, trial):
     return folder
 
 
-def collect_one_trial(name, on_angles=None):
+def collect_one_trial(name, on_angles=None, on_grip=None):
     pending = pending_trials(name)
     if not pending:
         return None
@@ -290,13 +294,15 @@ def collect_one_trial(name, on_angles=None):
     folder = prepare_trial(name, class_name, trial)
     hand = open_hand()
     try:
-        angles = grasp(hand, on_angles=on_angles)
         try:
+            angles = grasp(hand, on_angles=on_angles, on_grip=on_grip)
             save_grasp(folder)
         finally:
             release_hand(hand)
             if on_angles is not None:
-                on_angles(Proprioception.grip["start_angles"])
+                on_angles(Proprioception.grip[0]["start_angles"])
+            if on_grip is not None:
+                on_grip(1)
     finally:
         hand.close()
     return dict(class_name=class_name, trial=trial, angles_deg=angles,
@@ -393,15 +399,60 @@ def collect_dataset(name):
         for class_name, trial in pending:
             input(f"Place {class_name}, trial {trial}, then press Enter: ")
             trial_folder = prepare_trial(name, class_name, trial)
-            grasp(hand)
             try:
+                grasp(hand)
                 save_grasp(trial_folder)
             finally:
                 release_hand(hand)
             print("Trial saved and hand opened. Remove the object before the next trial.")
+            while input("Press Enter to continue, or R to retake this trial: ").strip().lower() == "r":
+                print(f"Retaking {class_name}, trial {trial}")
+                retake_trial(name, class_name, trial, hand=hand)
     finally:
         hand.close()
     return train_dataset(name)
+
+
+def retake_trial(name, class_name, trial, hand=None):
+    plan = read_collection(name)
+    class_name = class_name.strip().lower()
+    if class_name not in plan["trial_counts"]:
+        raise ValueError(f"Choose one of: {', '.join(plan['classes'])}")
+    if trial < 1 or trial > plan["trial_counts"][class_name]:
+        raise ValueError(f"Choose a trial from 1 to {plan['trial_counts'][class_name]}")
+    folder = dataset_folder(name) / "trials" / class_name / str(trial)
+    if not trial_complete(folder):
+        raise ValueError(f"Trial {trial} for {class_name} is incomplete; use collection to resume it")
+
+    # Record and check the replacement before moving the original trial.
+    archive = dataset_folder(name) / "retaken" / class_name
+    archive.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="retake_", dir=archive) as temporary:
+        replacement = Path(temporary) / "replacement"
+        own_hand = hand is None
+        if own_hand:
+            hand = open_hand()
+        try:
+            try:
+                grasp(hand)
+                save_grasp(replacement)
+            finally:
+                release_hand(hand)
+        finally:
+            if own_hand:
+                hand.close()
+        saved = archive / f"{trial}_{time.time_ns()}"
+        folder.rename(saved)
+        try:
+            replacement.rename(folder)
+        except OSError:
+            saved.rename(folder)
+            raise
+    print(f"Retaken trial {trial} for {class_name}; previous trial saved at {saved}")
+    if own_hand and not pending_trials(name):
+        train_dataset(name)
+    print("Retrain the neural model with option 6 before using it again")
+    return folder
 
 
 def extend_dataset(name):
@@ -486,20 +537,22 @@ def recognize(name):
     return output
 
 
-def recognize_once(name, on_angles=None):
+def recognize_once(name, on_angles=None, on_grip=None):
     model = load_model(name)
     hand = open_hand()
     try:
-        angles = grasp(hand, on_angles=on_angles)
-        result = predict(angles, model["samples"])
-        timestamp = datetime.now(timezone.utc)
-        run_folder = dataset_folder(name) / "runs" / timestamp.strftime("%Y%m%d_%H%M%S_%f")
         try:
+            angles = grasp(hand, on_angles=on_angles, on_grip=on_grip)
+            result = predict(angles, model["samples"])
+            timestamp = datetime.now(timezone.utc)
+            run_folder = dataset_folder(name) / "runs" / timestamp.strftime("%Y%m%d_%H%M%S_%f")
             save_grasp(run_folder)
         finally:
             release_hand(hand)
             if on_angles is not None:
-                on_angles(Proprioception.grip["start_angles"])
+                on_angles(Proprioception.grip[0]["start_angles"])
+            if on_grip is not None:
+                on_grip(1)
     finally:
         hand.close()
     output = dict(time_utc=timestamp.isoformat(), dataset=name,
@@ -606,6 +659,7 @@ def main():
         print("6. Train the physical-only neural model")
         print("7. Identify an object with the neural model")
         print("8. Launch presentation UI")
+        print("9. Retake a saved physical trial")
         choice = input("Choose: ").strip()
         try:
             if choice == "1":
@@ -625,8 +679,18 @@ def main():
             elif choice == "8":
                 from Physical_Only_UI import main as launch_ui
                 launch_ui()
+            elif choice == "9":
+                name = ask_dataset_name()
+                plan = read_collection(name)
+                print("Classes: " + ", ".join(
+                    f"{class_name} (1-{plan['trial_counts'][class_name]})"
+                    for class_name in plan["classes"]))
+                class_name = input("Class to retake: ").strip().lower()
+                trial = int(input("Trial number to retake: "))
+                input("Place the object and press Enter to retake the trial: ")
+                retake_trial(name, class_name, trial)
             else:
-                print("Choose 1 through 8")
+                print("Choose 1 through 9")
         except (FileNotFoundError, FileExistsError, ValueError, RuntimeError,
                 ModuleNotFoundError) as error:
             print(error)

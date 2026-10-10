@@ -39,10 +39,14 @@ def sample_fingerprint(samples):
 
 def normalize_angles(angles):
     angles = np.asarray(angles, dtype=float)
-    if angles.shape[-1] != 16 or not np.isfinite(angles).all():
-        raise ValueError("Expected 16 finite joint angles")
-    start = np.asarray(Proprioception.grip["start_angles"], dtype=float)
-    span = np.asarray(Proprioception.grip["max_angles"], dtype=float) - start
+    count = 16 * len(Proprioception.grip)
+    if not Proprioception.grip or angles.shape[-1] != count or not np.isfinite(angles).all():
+        raise ValueError(f"Expected {count} finite joint angles")
+    start = np.asarray([angle for grip in Proprioception.grip
+                        for angle in grip["start_angles"]], dtype=float)
+    targets = np.asarray([angle for grip in Proprioception.grip
+                          for angle in grip["max_angles"]], dtype=float)
+    span = targets - start
     span[span == 0] = np.inf
     return (angles - start) / span
 
@@ -55,7 +59,7 @@ def add_angle_noise(angles, labels, seed):
     repeated = np.repeat(angles, copies + 1, axis=0)
     noise = rng.normal(0, PhysicalOnly.network_noise_deg, repeated.shape)
     finger_noise = rng.normal(0, PhysicalOnly.network_finger_noise_deg,
-                              (len(repeated), 4))
+                              (len(repeated), 4 * len(Proprioception.grip)))
     noise += np.repeat(finger_noise, 4, axis=1)
     noise[::copies + 1] = 0
     return repeated + noise, np.repeat(labels, copies + 1)
@@ -66,11 +70,12 @@ class PhysicalOnlyNetwork:
         self.class_names = list(class_names)
         rng = np.random.default_rng(PhysicalOnly.network_random_seed if seed is None else seed)
         hidden = PhysicalOnly.network_hidden_size
-        self.weights1 = rng.normal(0, np.sqrt(1 / 16), (16, hidden))
+        inputs = 16 * len(Proprioception.grip)
+        self.weights1 = rng.normal(0, np.sqrt(1 / inputs), (inputs, hidden))
         self.bias1 = np.zeros(hidden)
         self.weights2 = rng.normal(0, np.sqrt(1 / hidden), (hidden, len(class_names)))
         self.bias2 = np.zeros(len(class_names))
-        self.reference_angles = np.empty((0, 16))
+        self.reference_angles = np.empty((0, inputs))
         self.max_distance = 0.0
         self.temperature = 1.0
         self.fingerprint = ""

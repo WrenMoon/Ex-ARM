@@ -124,7 +124,7 @@ class Proprioception:
 
 class PhysicalOnly:
     data_folder = "Data/Proprioception/Physical_Only"
-    default_dataset_name = "initial_9"
+    default_dataset_name = "multi_grip_study"
     default_trials_per_class = 3
     ui_width = 1560
     ui_height = 940
