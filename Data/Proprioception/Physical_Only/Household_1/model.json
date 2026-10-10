@@ -111,6 +111,12 @@
     0,
     0
   ],
+  "trial_counts": {
+    "ball": 3,
+    "bottle": 3,
+    "bowl": 3,
+    "mouse": 3
+  },
   "classes": [
     "ball",
     "bottle",

@@ -86,10 +86,10 @@ class PhysicalOnly:
     data_folder = "Data/Proprioception/Physical_Only"
     default_dataset_name = "initial_9"
     default_trials_per_class = 3
-    ui_width = 1280
-    ui_height = 820
-    ui_preview_width = 640
-    ui_preview_height = 420
+    ui_width = 1560
+    ui_height = 940
+    ui_preview_width = 520
+    ui_preview_height = 480
     ui_poll_ms = 80
 
     network_model_file = "neural_model.npz"

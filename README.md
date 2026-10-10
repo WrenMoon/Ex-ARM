@@ -1,60 +1,51 @@
-# Ex-ARM: LEAP Hand control, simulation, and perception
+# Ex-ARM: LEAP Hand control and perception
 
-Ex-ARM is a Python project for a 16-joint LEAP Hand. It brings together Dynamixel motor control, a MuJoCo hand viewer, forward and inverse kinematics, webcam teleoperation, a pose-sequencing GUI, recorded motion replay, and proprioceptive object recognition. Each tool can be used independently to control, observe, teach, or study the hand.
+Ex-ARM is a Python repository for controlling a 16-joint LEAP Hand and studying what the hand can learn from its own joint angles. It includes a Dynamixel hardware interface, a MuJoCo hand viewer, hand kinematics, webcam control, pose and motion tools, and two object-recognition experiments:
 
-The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps. Separate physical trials support nearest-trial and neural class-only experiments; accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object physical-only study and reports the available pilot results.
+- **Physical-only recognition:** collect labeled real-hand grasps and identify an object's class from the final 16 joint angles. It offers a nearest-trial baseline and a small neural classifier.
+- **Simulation-trained recognition:** grasp fixed CAD objects across a size sweep in MuJoCo, train a class-and-size model, then apply the same grasp to the real hand. This is a separate experimental pipeline; its real-hand accuracy has not been established.
 
-## Start here
-
-After [setting up Python](#setup), run `python Project.py`. This opens a terminal menu for the existing programs; it does not change their code or datasets. Direct commands in the rest of this README still work. The launcher starts programs from the repository root so their relative data paths resolve correctly, and uses `mjpython` for MuJoCo viewers on macOS.
-
-| Goal | Main menu | Next step |
-| --- | --- | --- |
-| Collect or resume real-hand object trials | **1 Physical-only object recognition** | Choose **1** in the physical-only menu, then enter a dataset name. |
-| Add classes or trials to a physical dataset | **1 Physical-only object recognition** | In its terminal menu choose **5** and then retrain the neural model with **6**. |
-| Identify an object with the physical-only neural model | **1 Physical-only object recognition** | In its terminal menu choose **7** and enter the trained dataset name. |
-| Present the physical-only system | **1 Physical-only object recognition** | Choose **2** to open the UI. |
-| Train or inspect the separate simulation model | **2 Simulation-trained object recognition** | Train first, then view the recorded grasps. Recognition with that model uses the real hand. |
-| Edit poses, use vision control, or inspect the hand | **3–5** | Choose the corresponding tool from its submenu. |
-
-Use a new dataset name for each physical study. The `initial_9` dataset is the three-object pilot; it should not be used as the collection name for the planned 20-object study. Raw trials, trained models, reports, and recognition runs for a physical dataset stay together under [`Data/Proprioception/Physical_Only/`](Data/Proprioception/Physical_Only/) in a folder named after that dataset. The simulation-trained workflow has its own model and output files directly under [`Data/Proprioception/`](Data/Proprioception/); training it regenerates those files. The two recognition models are separate.
-
-Before running a motor-control tool, check [`Connection.mode`, `Connection.Port`, motor IDs, and offsets](utils/Constants.py). The checked-in settings currently select `"both"` and `"COM3"`; set them for your computer and intended backend. Physical-only collection always opens the real hand. The configured grasp and its current limits are in `Proprioception.grip` in the same file.
+The [manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object physical-only study and reports the available pilot data. The repository does not yet contain a completed 20-class dataset.
 
 ## Contents
 
-- [Start here](#start-here)
-- [What is included](#what-is-included)
-- [Setup](#setup)
-- [Architecture and joint conventions](#architecture-and-joint-conventions)
-- [Controlling the hand](#controlling-the-hand)
-- [Forward and inverse kinematics](#forward-and-inverse-kinematics)
-- [Vision-based control and motion teaching](#vision-based-control-and-motion-teaching)
-- [Pose editor and scripted sequences](#pose-editor-and-scripted-sequences)
-- [Proprioceptive object recognition](#proprioceptive-object-recognition)
-- [Data, configuration, and troubleshooting](#data-configuration-and-troubleshooting)
-- [Current limitations](#current-limitations)
+- [Choose a program](#choose-a-program)
+- [Install and configure](#install-and-configure)
+- [Repository map](#repository-map)
+- [Shared hand control and conventions](#shared-hand-control-and-conventions)
+- [The controlled physical grasp](#the-controlled-physical-grasp)
+- [Physical-only object recognition](#physical-only-object-recognition)
+- [Simulation-trained class and size recognition](#simulation-trained-class-and-size-recognition)
+- [Pose editing and sequence playback](#pose-editing-and-sequence-playback)
+- [Vision control and motion teaching](#vision-control-and-motion-teaching)
+- [Kinematics, diagnostics, and utilities](#kinematics-diagnostics-and-utilities)
+- [Data and configuration reference](#data-and-configuration-reference)
+- [Known limits and troubleshooting](#known-limits-and-troubleshooting)
 
-## What is included
+## Choose a program
 
-| Area | Main files | Purpose |
+Start with `python Project.py`. The [project launcher](Project.py) groups the existing scripts into **Physical-only**, **Simulation-trained**, **Pose**, **Vision**, and **Diagnostics** menus. It starts each program in the repository root, where its relative data paths work. The scripts also remain directly runnable:
+
+| Goal | Direct command | Requires |
 | --- | --- | --- |
-| Hardware control | [`utils/LeapHand.py`](utils/LeapHand.py), [`utils/ExARM.py`](utils/ExARM.py) | Command motors, read joint state, and select real, simulated, or combined operation. |
-| Basic hand simulation | [`utils/SimHand.py`](utils/SimHand.py), [`Data/Leap_Model/`](Data/Leap_Model/) | Display and position the LEAP Hand in MuJoCo. |
-| Kinematics | [`utils/LeapKinematics.py`](utils/LeapKinematics.py) | Compute fingertip positions and solve joint angles for fingertip targets. |
-| Live vision control | [`Vision/Vision_Teleop.py`](Vision/Vision_Teleop.py), [`Vision/Vision_Retargeting.py`](Vision/Vision_Retargeting.py) | Follow a human hand seen by a webcam using direct angle mapping or inverse kinematics. |
-| Motion teaching | [`Vision/Vision_Kinesthetic_Teaching.py`](Vision/Vision_Kinesthetic_Teaching.py) | Record hand landmarks, process an angle trajectory, and replay it. |
-| Pose editing and playback | [`Ex-GUI.py`](Ex-GUI.py), [`Pose_Sequence_Runner.py`](Pose_Sequence_Runner.py) | Build, save, and play 16-joint pose sequences. |
-| Proprioception research | [`Grasp.py`](Grasp.py), [`Train_Proprioception.py`](Train_Proprioception.py), [`View_Proprioception.py`](View_Proprioception.py), [`Run_Proprioception.py`](Run_Proprioception.py) | Generate simulated grasps, train a class-and-size model, inspect trials, and run recognition on the physical hand. |
-| Physical-only experiment | [`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py), [`utils/PhysicalOnlyNetwork.py`](utils/PhysicalOnlyNetwork.py) | Collect and extend physical datasets; compare nearest-trial and neural class recognition. |
-| Project launcher | [`Project.py`](Project.py) | Open the existing tools from one terminal menu. |
-| Diagnostics and utilities | [`test1.py`](test1.py), [`utils/BoxPrinter.py`](utils/BoxPrinter.py), [`utils/URDF_Convertor.py`](utils/URDF_Convertor.py) | Display live motor state and assist with URDF mesh paths. |
+| Collect, resume, extend, train, or identify using physical trials | `python Physical_Only_Proprioception.py` | Real hand for collection and recognition; saved trials for training |
+| Open the physical-only presentation window | `python Physical_Only_UI.py` | Tkinter, MuJoCo for the hand preview, real hand for grasps |
+| Run and log one physical grasp | `python Grasp.py` | Real hand |
+| Generate CAD grasps and train the simulation model | `python Train_Proprioception.py` | MuJoCo, CadQuery; no real hand |
+| Browse recorded simulated grasps | `python View_Proprioception.py` | MuJoCo viewer and previous training output |
+| Identify class and size with the simulation-trained model | `python Run_Proprioception.py` | Trained simulation model and real hand |
+| Edit and play hand poses | `python Ex-GUI.py` | Tkinter and the selected hand backend |
+| Play a named JSON pose sequence | `python Pose_Sequence_Runner.py box_orient` | Selected hand backend |
+| Direct webcam angle control | `python -m Vision.Vision_Teleop` | Webcam, MediaPipe, OpenCV, selected backend |
+| Webcam fingertip retargeting | `python -m Vision.Vision_Retargeting` | Webcam, MediaPipe, OpenCV, SciPy, selected backend |
+| Record, process, and replay vision motions | `python -m Vision.Vision_Kinesthetic_Teaching` | Webcam for recording; selected backend for replay |
+| Display live joint state | `python test1.py` | Selected backend |
 
-The [`Data/`](Data/) folder contains the hand model, three STEP objects, example pose series, the MediaPipe hand landmark model, saved GUI sessions, and generated recognition data. The [`Manuscript/`](Manuscript/) folder contains the LaTeX research manuscript and its PDF.
+Run direct commands from the repository root. On macOS, replace `python` with `mjpython` when a command opens a **MuJoCo viewer**, including `View_Proprioception.py` and tools using `Connection.mode = "sim"` or `"both"`. The project launcher chooses `mjpython` for those commands on macOS. Headless simulation training uses ordinary Python. The physical-only UI embeds an offscreen MuJoCo rendering in Tkinter rather than opening the separate viewer.
 
-## Setup
+## Install and configure
 
-Use Python 3.10 or newer; Python 3.11 is a practical choice for the pinned packages. From the repository root:
+Python 3.11 is a practical starting point. Create and activate a virtual environment, then install the core requirements:
 
 ```bash
 python3 -m venv .venv
@@ -62,61 +53,64 @@ source .venv/bin/activate
 python -m pip install -r requirements-proprioception.txt
 ```
 
-On Windows, activate with `.venv\Scripts\activate`. The requirements file installs NumPy, MuJoCo, CadQuery, `pynput`, and the Dynamixel SDK. These cover the core hand interface and the proprioception workflow. Install the additional libraries used by kinematics and vision:
+On Windows, use `.venv\Scripts\activate` instead of `source .venv/bin/activate`. The [requirements file](requirements-proprioception.txt) pins NumPy, MuJoCo, and CadQuery and also installs `pynput` and `dynamixel-sdk`. Even a real-only `ExArm` currently imports both the hardware and MuJoCo backend modules, so those core packages are needed for the physical scripts too.
+
+For kinematics and vision, install their additional packages:
 
 ```bash
 python -m pip install scipy opencv-python mediapipe
 ```
 
-The pose GUI also needs Tkinter in the Python installation. The vision programs need a webcam and [`Data/hand_landmarker.task`](Data/hand_landmarker.task). A LEAP Hand, working motor power, and a serial connection are needed only for real-hardware operation.
+The GUI programs also require a Python installation with Tkinter. Vision needs a webcam and the included [MediaPipe hand-landmarker model](Data/hand_landmarker.task). Real-hand commands need hand power and a working serial connection. Check package compatibility in the environment you actually use; the vision packages are not pinned in the core requirements file.
 
-**Run commands from the repository root.** Several model and data paths are relative to it. On macOS, use `mjpython` in place of `python` for programs that open a MuJoCo viewer, including `ExArm` in `sim` or `both` mode. Headless training with `Train_Proprioception.py` uses `python`.
+Before a motor-control run, edit [utils/Constants.py](utils/Constants.py):
 
-## Architecture and joint conventions
+1. Set `Connection.Port`, `baudrate`, `ids`, and `offsets` for your hand. The checked-in port is `COM3`, which is not a macOS serial-device name.
+2. Set `Connection.mode` to `"real"`, `"sim"`, or `"both"` for the general hand, pose, vision, and diagnostic tools. The checked-in value is `"both"`, so those tools attempt **both hardware and a MuJoCo viewer**.
+3. Check `Proprioception.grip` and its current limits before a grasp. `Grasp.py` and physical-only collection use this same grasp. `Run_Proprioception.py` requires `Proprioception.hand_mode = "real"`, as checked in.
+4. Place objects at the same position and orientation for training and recognition. The simulation pipeline uses `Proprioception.mount_translation_m` and `mount_rotation_rpy_deg`; the physical-only pipeline relies on consistent real placement.
+
+## Repository map
 
 ```text
-Pose editor / sequences ─┐
-Vision tools ─────────────┼──> ExArm ──> LeapHand ──> Dynamixel motors
-Manual control ───────────┘       └────> SimHand  ──> MuJoCo hand viewer
-
-STEP objects + hand URDF ──> ProprioceptionSimulation ──> final angles
-                                              final angles ──> ProprioceptionModel
-Physical hand ──> Grasp ──> measured final angles ──────────> class and size
+Project.py                         One menu for the existing programs
+Grasp.py                           Shared controlled real-hand grasp
+Physical_Only_Proprioception.py    Physical trial collection, training, inference
+Physical_Only_UI.py                Presentation UI for that same physical workflow
+Train_Proprioception.py           Simulated grasp generation and model training
+View_Proprioception.py            Recorded simulated-grasp viewer
+Run_Proprioception.py             Real-hand inference with the simulation model
+Ex-GUI.py                          Pose editor
+Pose_Sequence_Runner.py           JSON pose-sequence player
+Vision/                           Webcam teleoperation, retargeting, motion teaching
+utils/                            Hand interfaces, kinematics, models, simulation, helpers
+Data/                             Hand model, CAD objects, examples, trials, models, runs
+Manuscript/                       Research manuscript and its LaTeX files
+requirements-proprioception.txt   Core Python dependencies
 ```
 
-[`utils/ExARM.py`](utils/ExARM.py) defines `ExArm`, the common interface used by most applications. Set `mode="real"` for motors, `mode="sim"` for the basic MuJoCo hand viewer, or `mode="both"` to send commands to both. In single-backend mode, `get_state()` returns `(positions, velocities, currents)`. In `both` mode it returns a dictionary with `"real"` and `"sim"` entries. Commands are forwarded to active backends; the basic simulation sets joint positions directly rather than modeling motor motion. Its current values are zeros.
+The root scripts are entry points. [utils/ExARM.py](utils/ExARM.py) joins the hardware and basic viewer backends; [utils/LeapHand.py](utils/LeapHand.py) talks to Dynamixel motors; [utils/SimHand.py](utils/SimHand.py) displays the hand. The two recognition implementations live in [utils/PhysicalOnlyNetwork.py](utils/PhysicalOnlyNetwork.py), [utils/ProprioceptionSimulation.py](utils/ProprioceptionSimulation.py), and [utils/ProprioceptionModel.py](utils/ProprioceptionModel.py). There is no `src/` package layer or installation step for this repository.
 
-The public joint vector always contains **16 angles in degrees**:
+## Shared hand control and conventions
 
-| Logical indices | Finger | Joint meaning |
+All public hand commands and measured positions use **16 angles in degrees**, in logical finger order:
+
+| Indices | Finger | Joint order |
 | --- | --- | --- |
-| 0–3 | Index | Abduction, flexion, PIP, DIP |
-| 4–7 | Middle | Abduction, flexion, PIP, DIP |
-| 8–11 | Ring | Abduction, flexion, PIP, DIP |
+| 0–3 | Index | Abduction, MCP flexion, PIP, DIP |
+| 4–7 | Middle | Abduction, MCP flexion, PIP, DIP |
+| 8–11 | Ring | Abduction, MCP flexion, PIP, DIP |
 | 12–15 | Thumb | Base rotation, MCP, PIP, DIP |
 
-This is the order accepted by `ExArm.set_goal_positions_degree()` and returned by hardware state reads. [`utils/LeapHand.py`](utils/LeapHand.py) contains `LOGICAL_TO_PHYSICAL` for motor wiring; its current mapping is the identity mapping. [`utils/SimHand.py`](utils/SimHand.py) separately swaps the first two MuJoCo coordinates of each non-thumb finger to present the same logical order. Kinematics uses radians internally; its methods ending in `_degree` accept or return degrees.
-
-## Controlling the hand
-
-### Connection settings
-
-[`utils/Constants.py`](utils/Constants.py) defines `Connection.mode`, `Port`, `baudrate`, `ids`, `offsets`, and `model_path` for the general control tools. The checked-in values are `mode="both"`, `Port="COM3"`, 4,000,000 baud, IDs 0–15, zero angle offsets, and `Data/Leap_Model/mujoco_robot.urdf`. Set the mode, port, and calibrations for your intended backend and hardware. The proprioception runner has its own `Proprioception.hand_mode`, described later.
-
-A minimal `ExArm` session uses the configured backend:
+`ExArm` accepts `mode="real"`, `"sim"`, or `"both"`. `set_goal_positions_degree()` sends the same logical joint vector to the active backend or backends. `get_state()` returns `(positions, velocities, currents)` for one backend and `{"real": ..., "sim": ...}` in `both` mode. **Space** while an `ExArm` program is active requests torque off and interrupts the program; scripts should close the hand in a `finally` block. Some individual programs also have their own Q or window controls.
 
 ```python
 from utils.Constants import Connection
 from utils.ExARM import ExArm
 
-hand = ExArm(
-    mode=Connection.mode,
-    ids=Connection.ids,
-    port=Connection.Port,
-    baudrate=Connection.baudrate,
-    offsets=Connection.offsets,
-    model_path=Connection.model_path,
-)
+hand = ExArm(mode=Connection.mode, ids=Connection.ids,
+             port=Connection.Port, baudrate=Connection.baudrate,
+             offsets=Connection.offsets, model_path=Connection.model_path)
 try:
     hand.set_torque_enabled(True)
     hand.set_goal_positions_degree([0.0] * 16)
@@ -125,95 +119,101 @@ finally:
     hand.close()
 ```
 
-With the checked-in `both` mode this opens the hand viewer and connects to the real hand. For direct low-level control, `LeapHand` exposes `set_torque_enabled()`, `set_goal_positions_degree()`, `get_state()`, operating-mode and goal-current helpers, and `close_port()`. It uses synchronized position writes and a bulk read of position, velocity, and current from all motors. It converts degrees to motor ticks using the configured offsets and a 180° position bias. Measured velocities and currents are the signed values read from Dynamixel registers.
+The hardware driver uses synchronized position writes and bulk reads of position, velocity, and current. It applies per-joint offsets and a 180° position bias when converting angles to Dynamixel ticks. Its checked-in logical-to-physical mapping is the identity, but it is defined explicitly in `LeapHand.py`. Read velocities are raw motor register counts. The grasp compares signed current **register readings** to the configured limits; calibrate those values for the installed motors and operating mode.
 
-While `ExArm` is active, its keyboard listener uses **Space** to disable torque and interrupt the main program. Keep cleanup in a `finally` block when writing a script. [`test1.py`](test1.py) is a manual state monitor: it uses [`utils/BoxPrinter.py`](utils/BoxPrinter.py) to display all positions, velocities, and currents in a live terminal layout. Run it with `python test1.py`, or `mjpython test1.py` on macOS if `Connection.mode` opens the simulation viewer.
+`SimHand` loads [Data/Leap_Model/mujoco_robot.urdf](Data/Leap_Model/mujoco_robot.urdf), converts between logical and MuJoCo joint order, and sets joint positions directly in a passive viewer. Its currents are zeros; it does not simulate motor current or an object grasp. The **separate** `GraspSimulation` adds a CAD object and collision checks for recognition training. Kinematics uses radians internally and palm-frame positions in metres; methods ending in `_degree` accept or return degrees.
 
-### Basic MuJoCo backend
+## The controlled physical grasp
 
-`SimHand` loads `Connection.model_path`, opens a passive MuJoCo viewer, and exposes the same position/state/reset/close methods used by `ExArm`. It also supports custom visual markers for fingertip targets. This backend is useful for inspecting a pose or following GUI and vision commands. It **does not add a grasped object or stop at collision**; the separate proprioception simulator does that.
+[Grasp.py](Grasp.py) implements the grasp shared by both recognition paths. It moves the hand to `Proprioception.grip["start_angles"]`, then advances all active fingers by the configured joint steps. For a moving joint, a signed current reading beyond `max_currents` stops **all four joints of that finger** at their measured positions. The other fingers continue until they contact or reach their configured target angles.
 
-The original [`robot.urdf`](Data/Leap_Model/robot.urdf), MuJoCo-compatible [`mujoco_robot.urdf`](Data/Leap_Model/mujoco_robot.urdf), and STL link meshes are under `Data/Leap_Model/`. Joint limits at 0, 8, 13, and 14 were widened to fit the proprioception grasp. The [`utils/URDF_Convertor.py`](utils/URDF_Convertor.py) utility strips ROS `package:///` mesh prefixes, but its current input/output constants still point at `Data/` rather than `Data/Leap_Model/`; update those paths before using it.
+After completion, the program retries the final hand-state read for up to `final_read_timeout_s` if the hand momentarily stops reporting positions. It returns the measured final 16 angles and writes the latest trace to `Data/Proprioception/log.csv` and the final vector to `Data/Proprioception/grasp_results.csv`. These two top-level files are replaced by the next grasp. Physical-only collection copies and checks them inside the named trial folder immediately after each successful grasp.
 
-## Forward and inverse kinematics
+Use `python Grasp.py` to check this motion and log a grasp without running recognition. The physical-only **collection** workflow saves the result, commands the hand back to its starting angles, and waits before asking for the next object placement. The standalone `Grasp.py` and simulation-model runner do not perform that collection step.
 
-[`utils/LeapKinematics.py`](utils/LeapKinematics.py) computes each fingertip position from a 16-joint pose using the hand's fixed transforms. It also solves fingertip targets with SciPy's bounded L-BFGS-B optimizer, supports multiple starting guesses, and provides numerical finger Jacobians. Fingertip positions and IK targets are in the hand's palm frame, in **metres**. Kinematic angle inputs and outputs are in **radians** unless a method name ends in `_degree`.
+## Physical-only object recognition
 
-```python
-import numpy as np
-from utils.LeapKinematics import LeapKinematics
+This is the main workflow for a real-object class experiment. It uses **no CAD object models or simulated training grasps**. The input to either classifier is the final 16-angle vector produced by the shared physical grasp. It predicts a **class**, not object size.
 
-kin = LeapKinematics()
-q = np.zeros(16)                         # radians, logical joint order
-tips = kin.fk(q)                         # four fingertip XYZ positions, metres
-index_q, info = kin.ik_finger(0, tips[0])
-whole_hand_q, infos = kin.ik(tips, q0=q)
-tips_from_degrees = kin.fk_degree(np.zeros(16))
-```
+### Use: collect, resume, and extend a dataset
 
-Other methods include `fk_finger()`, `fk_all_links()`, `ik_finger_multistart()`, `ik_degree()`, `jacobian_finger()`, `clip_to_limits()`, and `is_within_limits()`. Check the returned `info["success"]` and `info["error_m"]` before using an IK result. The module has its own hard-coded `JOINT_LIMITS`; these have not yet been synchronized with the wider URDF limits at joints 0, 8, 13, and 14.
+Run `python Physical_Only_Proprioception.py`, or choose **Physical-only object recognition → terminal menu** in `Project.py`:
 
-## Vision-based control and motion teaching
+| Menu option | Action |
+| --- | --- |
+| **1** | Create a collection plan or resume its remaining grasps; train the nearest-trial model when complete |
+| **2** | Rebuild the nearest-trial model from saved, complete trials |
+| **3** | Identify one object with the nearest-trial model |
+| **4** | Quit this menu |
+| **5** | Add trials to all or selected classes, or add new classes; then collect them |
+| **6** | Train or retrain the physical-only neural classifier |
+| **7** | Identify with the neural classifier, with repeat grasps when needed |
+| **8** | Open the physical-only presentation UI |
 
-The programs in [`Vision/`](Vision/) use MediaPipe's hand landmarks from a webcam. They control whichever backend is selected by `Connection.mode`. They are separate from the proprioception model; the object-recognition model never receives camera images.
+For a new study, choose a **new dataset name**, enter at least two class names and the desired number of grasps per class, and collect the prompted trials. One completed grasp is stored at `Data/Proprioception/Physical_Only/<dataset>/trials/<class>/<number>/` as `grasp_results.csv` plus the full `log.csv`. The program saves `collection.json` **before** collecting, so after an interruption you can choose option **1** and enter the same dataset name to resume. It skips complete trials and moves incomplete trial folders to `incomplete/` for inspection. After each saved collection trial, the hand is commanded open before the next placement prompt.
 
-### Direct angle teleoperation
+When all planned trials are present, option **1** trains `model.json` automatically. Choose **6 separately** to train `neural_model.npz`. To add data later, first finish any pending collection, then choose **5**. New trials or classes change the dataset: retrain the neural model before option **7**. Use a **new dataset** if you change the grasp, motor IDs, or offsets; the saved plan and models check these settings and reject incompatible measurements.
 
-[`Vision/Vision_Teleop.py`](Vision/Vision_Teleop.py) calculates finger flexion angles from landmark triplets, assembles a 16-joint pose, clips it, smooths it, and streams goals to `ExArm`. This route does not solve inverse kinematics. From the repository root:
+The checked-in `initial_9` pilot has three real grasps each of a 7.5 cm side-length cube, a 7.5 cm diameter sphere, and a 5 cm diameter cylinder. `Household_1` contains four household classes (`ball`, `bottle`, `bowl`, `mouse`) and a nearest-trial model. These are pilots, not the proposed 20-object experiment.
 
-```bash
-python -m Vision.Vision_Teleop
-```
+For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real grasps per class, train the neural model with option **6**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **5** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts currently selects `PhysicalOnly.default_dataset_name`, which is `initial_9` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
 
-Use `mjpython -m Vision.Vision_Teleop` on macOS when the selected backend opens MuJoCo. This experimental script currently has its camera preview and Q-key handling commented out; stop it from the terminal when finished.
+### How it works: two class-only models
 
-### Fingertip retargeting
+**Nearest-trial baseline.** [Physical_Only_Proprioception.py](Physical_Only_Proprioception.py) saves all measured angle vectors in `model.json`. Prediction chooses the class of the saved vector with the smallest Euclidean distance in **degrees**. Its leave-one-trial-out report excludes each trial in turn when scoring that trial. This baseline has no probability or unknown-object decision: it always chooses one of its saved classes.
 
-[`Vision/Vision_Retargeting.py`](Vision/Vision_Retargeting.py) builds a palm frame from landmarks, rescales and remaps fingertip positions to the LEAP frame, solves IK for each finger, smooths the joint angles, and streams them to `ExArm`. It displays the tracked hand in an OpenCV window; press **Q** there to quit.
+**Neural classifier.** [PhysicalOnlyNetwork.py](utils/PhysicalOnlyNetwork.py) normalizes each angle by that joint's configured start-to-target span; joints with zero span contribute no normalized change. A dense **16 → 24 tanh → number-of-classes** network produces softmax class probabilities. Training uses NumPy and Adam, class balancing, weight decay, and, by default, 20 noisy copies plus the original of each real trial. The synthetic copies add both per-joint and shared-per-finger Gaussian angle noise. They help tolerance to small measurement changes but are not additional independent grasps.
 
-```bash
-python -m Vision.Vision_Retargeting
-```
+The neural evaluation holds out **real trials before generating noise** in up to three folds. Validation loss selects training duration; a final model trains on all physical trials. Held-out logits set a probability temperature and held-out nearest-reference distances set the saved distance threshold. Training requires at least **three real trials per class**. The model saves a fingerprint of its physical samples and settings, and loading it asks for retraining if either changed.
 
-`HAND_SCALE_M`, `AXIS_MAP`, `PALM_OFFSET`, and the smoothing/IK settings near the top of that file define the camera-to-hand calibration. Match them to your camera and hand setup. The script can also show fingertip target markers in the MuJoCo viewer through `SimHand`.
+A prediction can be a known class, `uncertain` (low top probability or small gap between the two leading classes), or `unknown` (too far from saved physical grasps). In terminal option **7**, an uncertain or unknown result can trigger another placement and grasp, up to `PhysicalOnly.network_max_grasps` (default three). The program averages per-class probabilities and uses the median reference distance across those grasps for the combined decision. It stops early when it accepts a known class. Unknown-object rejection has **not** been validated on a separate unseen-class set.
 
-### Record, process, and replay a motion
+The checked-in `initial_9` neural report records **9/9** correct held-out pilot trials; its nearest-trial leave-one-out result is also **9/9**. The `Household_1` nearest-trial model records **11/12** leave-one-out trials correct. These results concern repeated grasps of a few available objects and do not establish accuracy for 20 classes, new sizes, new object instances, or new sessions.
 
-[`Vision/Vision_Kinesthetic_Teaching.py`](Vision/Vision_Kinesthetic_Teaching.py) provides a terminal menu with three stages:
+### Use: presentation window
 
-1. **Record:** save a webcam video and per-frame MediaPipe landmarks in `Data/Motions/<name>.avi` and `<name>_landmarks.pkl`.
-2. **Process:** solve IK offline and save a 16-joint degree trajectory as `<name>_trajectory.npy`.
-3. **Replay:** interpolate that trajectory and command the selected hand backend. The menu can also list or delete saved motions.
+Open `python Physical_Only_UI.py` or choose option **8** in the physical-only terminal menu. The [UI](Physical_Only_UI.py) operates on the **same datasets and models**:
 
-```bash
-python -m Vision.Vision_Kinesthetic_Teaching
-```
+- **Collect:** create a plan, collect the next pending grasp, or expand a completed plan. The hand opens after each saved collection grasp.
+- **Train:** build the nearest-trial model or neural classifier.
+- **Recognize:** run a nearest-trial grasp or start and repeat a neural reading. The neural view shows each class probability and the final decision; the nearest-trial view shows per-class angle distances.
 
-Its camera-to-hand calibration mirrors the retargeting script. The combined record/process/replay menu option currently calls replay with an unsupported argument; use menu options **1, 2, then 3** separately. The `Data/Motions/` directory is created when the program runs.
+The MuJoCo hand panel mirrors measured physical joint angles for display. It does not generate training data or determine contact. Drag to rotate and scroll to zoom. Hardware and training jobs run in background threads so the Tk window can remain responsive. If offscreen MuJoCo rendering cannot start, the UI displays a preview-unavailable message while its other controls remain available.
 
-## Pose editor and scripted sequences
+## Simulation-trained class and size recognition
 
-### Ex-GUI
+This pipeline trains from [STEP objects](Data/Objects/) and the MuJoCo hand model, then applies the shared physical grasp at inference. Its saved `model.npz` is unrelated to the physical-only `neural_model.npz`.
 
-[`Ex-GUI.py`](Ex-GUI.py) is a Tkinter editor for arranging and playing poses. Run `python Ex-GUI.py` from the repository root; use `mjpython Ex-GUI.py` on macOS when `Connection.mode` is `sim` or `both`.
+### Use: train, inspect, and run
 
-- Each of the 16 joints has a slider, direct angle entry, and ±1°/±5° controls.
-- Finger tools copy a four-joint pose between fingers; zero tools reset one finger or all joints.
-- Poses have names and durations. You can create, update, duplicate, insert, delete, reorder, play, pause, and stop them.
-- The GUI can copy a pose or sequence to the clipboard as Python-style dictionaries and import a pasted sequence.
-- Manual sessions use [`Data/Ex-GUI/pose_session.json`](Data/Ex-GUI/pose_session.json); autosave uses [`pose_editor_autosave.json`](Data/Ex-GUI/pose_editor_autosave.json).
+1. Check the object entries, grasp, mount pose, size sweep, and joint offsets in [utils/Constants.py](utils/Constants.py).
+2. Run `python Train_Proprioception.py`. It regenerates the simulation CSVs and trains the model without commanding the real hand.
+3. Run `python View_Proprioception.py` to inspect recorded scenes (`mjpython` on macOS). Select an object and scale in the terminal. In the viewer: **Space** plays or pauses; **Left/Right** steps; **R** restarts; **N/P** changes scene; **M/Esc** returns to the terminal menu; **Q** quits.
+4. With the correct real-hand port and the same object placement, run `python Run_Proprioception.py`. It checks that the saved model matches the current settings before opening the hand, then prints a class and size or `unknown` and saves `recognition_result.json`.
 
-`RobotController` sends the current GUI angles at roughly 30 Hz when torque is enabled. The application uses `Connection.mode`, so the checked-in `both` mode attempts to connect to the real hand and the basic MuJoCo viewer. If connection fails, it displays a warning and continues with a mock robot; visible GUI movement then does not mean motors are moving.
+### How simulation and training work
 
-### JSON pose sequences
+[ProprioceptionSimulation.py](utils/ProprioceptionSimulation.py) imports each STEP file through CadQuery, tessellates it, converts its geometry from **millimetres to metres**, scales it, and adds a fixed mesh object to the MuJoCo hand model. It checks hand-object contacts as the configured grasp advances. Contact on any link stops that whole finger. It refines the last clear angle by bisection and records that pose; an angle target can also stop a finger. An unexpected palm or stationary-finger contact is an error. The simulator sets joint positions directly; it does not model motor force, compliance, current, or communication delay.
 
-[`Pose_Sequence_Runner.py`](Pose_Sequence_Runner.py) validates and replays a named JSON sequence from [`Data/Example_pose_series/`](Data/Example_pose_series/). The repository includes `box_orient.json` and `bottle_orient.json`. For example:
+The checked-in sweep is **150% down to 50% in 5% increments**: 21 sizes for each of the cube, sphere, and cylinder, or 63 simulated grasps. The label `size_m` means **cube side length** for `cube` and **diameter** for `sphere` and `cylinder`. Each class's `reference_size_m` in `Proprioception.objects` is its size at 100%; changing it changes the size label, while replacing or rescaling the STEP file changes the actual simulated geometry. Check both together.
 
-```bash
-python Pose_Sequence_Runner.py box_orient
-```
+[ProprioceptionModel.py](utils/ProprioceptionModel.py) normalizes final angles by grasp span, ignoring joints with no planned movement. Its dense **16 → 32 tanh → (classes + one scale output)** network predicts class probabilities and a continuous size factor. The reported size is that factor multiplied by the predicted class's reference size. NumPy/Adam minimizes class cross-entropy plus weighted squared scale error. Training adds 50 Gaussian-noise copies per simulated grasp by default.
 
-Each pose supplies a positive duration in seconds and four arrays of four **degree** angles:
+Every fifth size in the sweep is held out to measure interpolation to unseen simulated sizes; the final saved model then retrains on **all** simulated sizes. Recognition rejects a grasp as `unknown` if it is too far from reference angles, has low class probability, disagrees with the nearest reference class, or has similar distances to two classes. The distance threshold is derived from held-out **known** sizes, so this is not a validated novel-object detector.
+
+The checked-in [training report](Data/Proprioception/training_report.json) records **13/15 (86.7%)** raw class predictions correct on held-out simulated sizes and **1.02 mm** mean absolute size error. Its rejection rules accepted **3/15** held-out grasps, all correctly classified. Those numbers are for simulation. The real current-threshold grasp can stop at different angles from instantaneous simulated contact; the simulation-trained model's physical performance is still an open research question.
+
+### Add or change a simulated object
+
+Put a STEP file in [Data/Objects/](Data/Objects/) and add a matching entry to `Proprioception.objects` in [utils/Constants.py](utils/Constants.py): `file`, `class_name`, `size_name`, and `reference_size_m`. The physical-only workflow does **not** use this list. Check the imported object's units, mount placement, clearance at the starting pose, contact behavior, and URDF joint limits, then rerun training and inspect the viewer. Replacing a STEP or URDF file also calls for retraining: model loading compares configuration values but does **not** hash geometry files. [Data/Objects/config.json](Data/Objects/config.json) is an older, unused configuration and must not be treated as the source of these settings.
+
+## Pose editing and sequence playback
+
+[Ex-GUI.py](Ex-GUI.py) is a Tkinter pose editor. Choose **Pose tools → Open pose editor** in `Project.py`, or run it directly. Its 16 sliders and angle entries let you edit fingers, copy a finger pose, zero joints, and add, update, duplicate, insert, reorder, or delete named poses. A background controller sends the current angles at about 30 Hz **when torque is enabled**. Playback holds each saved pose for its configured duration; play, pause, and stop are available. The GUI can copy a pose or sequence as a Python-style dictionary and import a pasted sequence.
+
+Manual session save/load uses `Data/Ex-GUI/pose_session.json`; autosave uses `pose_editor_autosave.json` in that folder. These session files are a **list of named poses with flat 16-angle arrays**. If backend connection fails, the GUI reports a warning and uses its mock controller; moving a slider in mock mode does not move the hand.
+
+[Pose_Sequence_Runner.py](Pose_Sequence_Runner.py) plays a **different JSON format** from [Data/Example_pose_series/](Data/Example_pose_series/). Choose a sequence in the project menu or run, for example, `python Pose_Sequence_Runner.py bottle_orient`. Each pose has a positive `duration` and four arrays of four degree angles:
 
 ```json
 {
@@ -229,119 +229,78 @@ Each pose supplies a positive duration in seconds and four arrays of four **degr
 }
 ```
 
-The runner flattens these finger arrays into logical joint order and sends each pose for its duration using `Connection.mode`. Use `mjpython` on macOS if that mode opens MuJoCo. GUI session JSON uses a different format: each saved pose has a name, duration, and one flat 16-angle array.
+The runner validates that structure, flattens the four fingers into logical joint order, and repeatedly commands each target for its duration. It uses `Connection.mode`, so check the selected backend and hand clearance before playback. The editor's session JSON is **not** directly accepted by this runner.
 
-## Proprioceptive object recognition
+## Vision control and motion teaching
 
-The recognition research asks whether the **final 16 joint angles after one controlled grasp** reveal an object's class and size. It currently considers a cube, sphere, and cylinder fixed at one common pose. Training uses collision in MuJoCo; the final physical program uses signed motor current as a contact proxy.
+The three [Vision](Vision/) programs use the included MediaPipe hand-landmarker model with webcam frames. They send commands to `ExArm` using `Connection.mode`. Their camera-to-hand calibration is currently kept **inside the individual scripts**, separate from `utils/Constants.py`.
 
-```text
-STEP objects + fixed placement + size sweep
-    -> MuJoCo grasp -> final angles -> train and validate
-    -> saved class-and-size model
+| Program | Use and internal method | Output or control |
+| --- | --- | --- |
+| [Vision_Teleop.py](Vision/Vision_Teleop.py) | Estimates joint flexion from three-point landmark angles, clips and smooths a 16-angle pose; no IK | Streams joint goals from the live webcam. Its OpenCV preview and Q handling are currently commented out, so stop it from the terminal or via the `ExArm` Space interruption. |
+| [Vision_Retargeting.py](Vision/Vision_Retargeting.py) | Builds a palm frame, maps four human fingertips into the LEAP frame, solves bounded per-finger IK, and smooths the answer | Streams goals and shows an OpenCV preview; press **Q** to exit that window. In simulation mode, it also asks the viewer to draw target markers. |
+| [Vision_Kinesthetic_Teaching.py](Vision/Vision_Kinesthetic_Teaching.py) | Records landmarks, processes them through the same fingertip mapping and IK offline, then interpolates the angle trajectory for replay | Menu options **1 record**, **2 process**, and **3 replay**; generated files go to `Data/Motions/`. |
 
-Physical object -> current-limited grasp -> measured final angles
-                -> known class and size, or unknown
+In the retargeting and teaching scripts, `HAND_SCALE_M`, `AXIS_MAP`, `PALM_OFFSET`, smoothing, and IK settings define the webcam-to-hand calibration. Fingertip positions and IK targets are in the hand's palm frame in **metres**. Retargeting warm-starts the IK solver from the previous video frame. Teaching records `<name>.avi` and `<name>_landmarks.pkl`, processes `<name>_trajectory.npy` of shape `(frames, 16)` in **degrees**, and replays interpolated commands. Its menu can also list and delete saved motions. The combined **record → process → replay** menu option currently passes an unsupported argument to `replay_motion`; use options **1, 2, then 3** separately.
+
+## Kinematics, diagnostics, and utilities
+
+[LeapKinematics.py](utils/LeapKinematics.py) implements forward kinematics for the four fingertips and their links, numerical finger Jacobians, and SciPy L-BFGS-B inverse kinematics within its hard-coded joint limits. Public angle inputs and outputs are **radians**, except methods ending in `_degree`. Positions use the palm frame in **metres**. The IK result includes `success` and `error_m`; inspect them before using a target.
+
+```python
+import numpy as np
+from utils.LeapKinematics import LeapKinematics
+
+kin = LeapKinematics()
+tips_m = kin.fk(np.zeros(16))           # four fingertip XYZ positions
+q_rad, info = kin.ik_finger(0, tips_m[0])
+print(info["success"], info["error_m"])
 ```
 
-### Simulated grasps
+`test1.py` uses [BoxPrinter.py](utils/BoxPrinter.py) to show live positions, velocities, and currents in an updating terminal layout; it is a **manual diagnostic**, not an automated test. `test2.py` is an older standalone current-threshold experiment with its **own** grasp dictionary. It is not the grasp used for proprioception training or recognition and is not in the project launcher's normal workflow. `utils/BoxPrinter.py` manages ANSI terminal boxes and terminal-size/layout checks.
 
-[`utils/ProprioceptionSimulation.py`](utils/ProprioceptionSimulation.py) imports STEP geometry with CadQuery, converts millimetres to metres, adds a fixed object body and explicit contact pairs to the hand model, and replays the grasp configured in `Proprioception.grip`. The default scale sweep runs from **150% down to 50% in 5% steps**, giving 21 sizes for each of the three objects and 63 scenes. The cube's target size is its **side length**; sphere and cylinder targets are **diameter**. All dimensions scale uniformly.
+The hand CAD files are in [Data/Leap_Model/](Data/Leap_Model/): `robot.urdf`, the MuJoCo-compatible `mujoco_robot.urdf`, STL meshes, and part files. [URDF_Convertor.py](utils/URDF_Convertor.py) removes `package:///` mesh prefixes, but its current `INPUT` and `OUTPUT` constants point to `Data/robot.urdf` and `Data/mujoco_robot.urdf`, not the files under `Data/Leap_Model/`. Correct those paths before invoking the converter. The hard-coded limits in `LeapKinematics.py` are independent of the URDF and have not been reconciled with all of the wider grasp limits.
 
-The grasp advances each active finger by its configured angle step. Contact on any link stops **all four joints of that finger**; other fingers keep moving. A finger can also finish at its angle target. MuJoCo refines contact to the last clear pose and records the final angles and every intermediate step. It sets positions directly rather than simulating motor dynamics or current. The older `Data/Objects/config.json` is not read by this pipeline; object definitions, mount pose, sweep, offsets, and grasp values are in [`utils/Constants.py`](utils/Constants.py).
+## Data and configuration reference
 
-```bash
-python Train_Proprioception.py
-```
+| Location | What it contains | Writer or reader |
+| --- | --- | --- |
+| [Data/Leap_Model/](Data/Leap_Model/) | URDFs, STL collision/visual meshes, part files | `SimHand`, `GraspSimulation`, UI preview, kinematics reference |
+| [Data/Objects/](Data/Objects/) | STEP cube, sphere, cylinder; older unused `config.json` | Simulation training and viewer read the STEP files |
+| [Data/Example_pose_series/](Data/Example_pose_series/) | Named JSON pose sequences | Pose sequence runner |
+| [Data/Ex-GUI/](Data/Ex-GUI/) | Editor session and autosave JSON | Pose editor |
+| `Data/Motions/` | Recorded video, landmarks, processed trajectories | Vision kinesthetic teaching |
+| [Data/hand_landmarker.task](Data/hand_landmarker.task) | MediaPipe hand detection model | All vision scripts |
+| [Data/Proprioception/](Data/Proprioception/) | Simulated-grasp CSVs, sim model and report, latest raw physical grasp and sim-model recognition result | `Train_Proprioception.py`, `Grasp.py`, `Run_Proprioception.py` |
+| [Data/Proprioception/Physical_Only/](Data/Proprioception/Physical_Only/) | Named real-trial datasets, baseline/neural models, reports and saved inference runs | Physical-only terminal program and UI |
+| [Manuscript/](Manuscript/) | LaTeX research manuscript and build files | Research writing, separate from runtime code |
 
-This command regenerates the simulated grasp files, trains the model, and prints validation metrics. To inspect any recorded object/size trial, run `mjpython View_Proprioception.py` on macOS or `python View_Proprioception.py` elsewhere. A terminal menu selects the object and scale; the MuJoCo viewer replays the recorded grasp. **Space** plays/pauses, **Left/Right** step frames, **R** restarts, **N/P** change scenarios, **M/Esc** returns to the menu, and **Q** quits.
+Inside a physical dataset, `collection.json` is the planned classes, counts, grasp, motor IDs, and offsets. `trials/<class>/<number>/` contains immutable completed grasp records. `model.json` is the nearest-trial baseline. `neural_model.npz` and `neural_report.json` are the physical classifier and its held-out report. `runs/` holds nearest-trial recognition, while `neural_runs/` holds individual and combined neural recognition. The latest top-level `Data/Proprioception/log.csv` and `grasp_results.csv` are overwritten by the next grasp; the copied trial and run folders preserve earlier measurements.
 
-### Model and validation
+Inside `Data/Proprioception/`, simulation training writes `simulation.csv` (one final pose per object/scale), `training_steps.csv` (viewer frames), `training_samples.csv` (original and noisy model inputs), `validation.csv`, `training_report.json`, and `model.npz`. Physical inference with that model writes `recognition_result.json`. Re-running simulation training replaces its generated model and CSVs, so copy an experiment elsewhere first if you need to preserve a previous run.
 
-[`utils/ProprioceptionModel.py`](utils/ProprioceptionModel.py) normalizes final angles by the configured grasp spans; joints that do not move in simulation are ignored so their encoder variation cannot dominate the distance check. A fully connected **32-unit tanh layer** feeds three class logits and one continuous scale output: **676 trainable parameters** for the three current classes. Predicted physical size is the scale factor multiplied by that class's reference size.
+[utils/Constants.py](utils/Constants.py) is the main place to change experiment settings:
 
-Training uses NumPy/Adam, class cross-entropy plus scale squared error, and 50 noisy copies per simulated grasp with 0.5° Gaussian angle noise by default. Every fifth scale is excluded from the validation model's training data. A final model is then fitted using all 63 simulated sizes. An `unknown` result is a rule-based rejection if a grasp is distant from references, has low class probability, disagrees with the nearest reference class, or is too similar to another class.
-
-The checked-in report records **13/15 (86.7%) raw class predictions correct** and **1.02 mm** mean absolute size error on held-out simulated sizes. The rejection rule accepted **3/15**, all with the correct class. Its distance threshold was derived using those same held-out sizes, so accepted/rejected results are descriptive rather than an independent test of novel-object detection. Nine labeled real-hand trials are now included for comparison; the simulated model's physical accuracy has not been established.
-
-### Physical recognition
-
-[`Grasp.py`](Grasp.py) slowly closes all four fingers with the configured target angles. When a joint's signed measured current exceeds its threshold, that **entire finger stops at its measured angles**. If the final state read fails, the grasp waits and retries for up to `Proprioception.final_read_timeout_s` seconds. `python Grasp.py` performs and logs only this physical grasp. [`Run_Proprioception.py`](Run_Proprioception.py) loads the trained model first, runs the grasp on the real hand, prints class and size or `unknown`, and saves a JSON result:
-
-```bash
-python Run_Proprioception.py
-```
-
-Set `Connection.Port` and verify the hand's motor IDs, angle offsets, calibrated current thresholds, and object fixture before running it. `Proprioception.hand_mode` must remain `"real"` for the final recognition program. The physical object must be mounted in the same relative position used for training.
-
-### Physical-only class experiment
-
-[`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) uses the same physical [`Grasp.py`](Grasp.py) and does not load MuJoCo data or the simulation-trained `model.npz`. It provides two separate class-only methods. The original nearest-trial method chooses the class of the closest saved 16-angle grasp; it does not estimate size or reject an unknown class. The added [`PhysicalOnlyNetwork`](utils/PhysicalOnlyNetwork.py) is a small 16-input, 24-hidden-unit neural classifier with one output per class.
-
-```bash
-python Physical_Only_Proprioception.py
-```
-
-The terminal menu offers **1** to collect or resume, **2–3** to train and run the nearest-trial method, **5** to add trials or classes, **6–7** to train and run the neural method, and **8** to launch the presentation UI. For a new collection, enter the number of classes, the number of grasps per class (default 3), and each class name. The program saves `collection.json` before the first grasp and saves each completed trial separately. After the final angles and grasp files are saved, the hand automatically moves to the configured starting angles and waits for `Proprioception.settle_time_s` before the next placement prompt. If collection stops, choose **1** and enter the same dataset name; complete trials are skipped. For a partial collection made with the older program, re-enter its original class names and trial count once. Incomplete files are preserved separately for inspection.
-
-The presentation window can also be started directly with `python Physical_Only_UI.py`. It uses the same physical datasets and models as the terminal menu. Its **Collect** tab creates plans, resumes one pending grasp at a time, and adds trials or classes; **Train** builds either class-only model; **Recognize** runs nearest-trial or neural identification. For neural identification, use **Run neural grasp** again to combine another reading, or **Start a new neural reading** for a different object. The right side shows the MuJoCo hand at the measured physical joint angles, with drag-to-rotate and scroll-to-zoom controls. It is a visual mirror of the real hand, not a second recognition simulation. Neural results show a probability for every class and the final class, `uncertain`, or `unknown` decision. Nearest-trial results show per-class angle distances because that method has no probability estimate. Hardware and training jobs run in the background so the window stays responsive. The UI requires Tkinter and MuJoCo in the active Python environment.
-
-Choose **5** on a complete dataset to add the same number of grasps to every current class, add extra grasps to selected classes, and/or add new classes with their own trial counts. The expanded plan is saved before collection, so an interrupted extension also resumes with option **1**. The nearest-trial model is updated when collection finishes. Choose **6** to train or retrain the neural model after changing any physical trials. Use a new dataset when changing the grip, motor IDs, or angle offsets; existing measurements should not be mixed across those settings. The class names do not need entries in `Proprioception.objects` or STEP files. Collection and recognition require a real hand and configured `Connection.Port`; training does not connect to hardware.
-
-Neural training uses every completed physical trial for the final model. During evaluation, it first holds out real trials in up to three folds, then adds small joint and finger-level angle noise **only to the training folds**. Class weighting reduces the effect of unequal trial counts. The final model is retrained on all physical trials, and a saved report gives held-out accuracy and a confusion table. It requires at least three real trials per class. The noise, training settings, score thresholds, and maximum repeat grasps are in `PhysicalOnly` in [`utils/Constants.py`](utils/Constants.py). Noise copies are variations of existing trials, not independent physical evidence.
-
-Choose **7** to run the neural model. It opens the hand between grasps and requests another placement when the combined result is uncertain or far from saved trials, up to `PhysicalOnly.network_max_grasps` (default 3). Each grasp and the combined prediction are saved under `neural_runs/`. The output may be a class, `uncertain`, or `unknown`. Its class score is calibrated on held-out **known** trials, but unknown-object rejection has not been validated with unseen objects. A high class score alone is not treated as proof that an object is known.
-
-The included [`initial_9`](Data/Proprioception/Physical_Only/initial_9/) dataset contains three grasps each of a **7.5 cm side cube**, **7.5 cm diameter sphere**, and **5.0 cm diameter cylinder**, with their full `log.csv` traces. Its nearest-trial `model.json` identifies **9/9** supplied trials in leave-one-trial-out testing. Its neural `neural_report.json` also records **9/9** in three-fold held-out-trial testing. Both results test repeat grasps of those exact objects and sizes; neither establishes recognition across new sizes, placements, sessions, or unknown objects. The nearest-trial method saves runs under `runs/`; the neural method uses `neural_runs/`.
-
-These trials also show a sim-to-real gap. At the measured sizes, mean real minus simulated angles differ by object: joint 8 is about **+7.4°** for the cube and **+7.2°** for the sphere, but **−0.5°** for the cylinder. Joint 5 is about **−2°** for all three. In a nearest-simulation diagnostic, the raw simulated grasps identify **4/9** real trials. A correction averaged from the other two classes, then clipped to the grasp angle limits, identifies **5/9**. Using trial 1 of each class as its own offset identifies that class in all **6/6** remaining repeat trials, but those repeats have the same size. Transfer to other sizes remains untested.
-
-### Outputs and adding an object
-
-All experiment outputs are under [`Data/Proprioception/`](Data/Proprioception/):
-
-| File | Contents |
+| Class | Main settings |
 | --- | --- |
-| `simulation.csv` | One final 16-angle grasp per object and scale, including size and finger stop reasons. |
-| `training_steps.csv` | Recorded angle trajectory for every simulated scene; input to the viewer. |
-| `training_samples.csv` | Original and noise-augmented angles used for the validation and final training stages. |
-| `validation.csv`, `training_report.json` | Held-out predictions, rejection reasons, metrics, and training settings. |
-| `model.npz` | Weights, object metadata, reference grasps, and stored settings. |
-| `log.csv`, `grasp_results.csv` | Last physical grasp's state trace and final measured angles. |
-| `recognition_result.json` | Last physical run's timestamp, final angles, and prediction. |
-| `Physical_Only/initial_9/` | Nine labeled real grasps, a nearest-trial model, a neural model, and its evaluation report. |
+| `Connection` | General backend mode, port, baud rate, motor IDs and offsets, MuJoCo hand-model path |
+| `Proprioception` | Shared grasp, current limits, timing and read retries; CAD objects and reference sizes; fixed mount and scale sweep; simulation noise, class-and-size network, rejection rules, and output paths |
+| `PhysicalOnly` | Dataset root and defaults; UI dimensions; physical-network training, noise, validation, rejection thresholds, and repeat-grasp limit |
 
-Training overwrites its generated CSVs and model; a physical run overwrites its last-run logs. To add a class, put a STEP file measured in millimetres in [`Data/Objects/`](Data/Objects/), add its metadata and reference size to `Proprioception.objects`, and retrain. Check that the object does not touch the hand at the initial pose and that the grasp fits the URDF limits. Retrain after changing STEP or URDF geometry: model loading checks many constants but does not hash those files.
+There are a few legacy local constants in the vision scripts, the pose runner, kinematics module, and `URDF_Convertor.py`; changing `Constants.py` does not update those automatically. If a saved model says the settings or physical trial fingerprint changed, retrain the corresponding model. In particular, change the grasp or motor calibration only with a **new physical dataset**.
 
-## Data, configuration, and troubleshooting
+## Known limits and troubleshooting
 
-| Path | Role |
+| Symptom or question | Check |
 | --- | --- |
-| [`utils/Constants.py`](utils/Constants.py) | `Connection` controls the general hand backend. `Proprioception` controls the recognition grasp, final-read retry, objects, scale sweep, noise, network, rejection rules, and output paths. `PhysicalOnly` controls physical dataset defaults and neural training and recognition settings. |
-| [`Data/Leap_Model/`](Data/Leap_Model/) | Hand URDFs, STL meshes, and part files. |
-| [`Data/Example_pose_series/`](Data/Example_pose_series/) | JSON sequences for the pose runner. |
-| [`Data/Ex-GUI/`](Data/Ex-GUI/) | Saved and autosaved editor sessions. |
-| `Data/Motions/` | Generated videos, landmark recordings, and IK trajectories from motion teaching. |
-| [`Data/Objects/`](Data/Objects/) | Cube, sphere, and cylinder STEP models for recognition. |
-| [`Data/Proprioception/`](Data/Proprioception/) | Generated simulations, model, validation, and physical recognition outputs. |
-| [`Manuscript/`](Manuscript/) | Source and PDF for the research paper based on the implemented recognition study. |
+| The general hand tools try to open a serial port unexpectedly | The checked-in `Connection.mode` is `"both"`; select `"sim"` for a viewer-only run or configure the real port. |
+| A physical tool cannot communicate with the hand | Check power, serial-device name, baud rate, motor IDs, offsets, and whether another program owns the port. `Grasp.py` retries a missing final read for a limited time. |
+| A physical model refuses to load | Check whether the grasp, calibration, class counts, trials, or neural settings changed; complete collection and retrain. |
+| The sim-to-real result is `unknown` | Inspect `Data/Proprioception/recognition_result.json` for the reason and compare the measured angles with `simulation.csv`; different real contact and simulated collision stop angles are a known gap. |
+| The MuJoCo viewer fails on macOS | Launch the viewer script with `mjpython` in an environment with MuJoCo and a desktop session; the project menu chooses it when available. |
+| The physical UI has no MuJoCo hand image | The preview needs MuJoCo offscreen rendering and the configured URDF. The UI displays the preview error in its canvas. |
+| The pose GUI moves but hardware does not | Check `Connection.mode`, torque state, and any mock-mode connection warning. |
+| Vision does not track or cannot start | Check the webcam, `Data/hand_landmarker.task`, vision packages, and the calibration constants in the selected script. |
+| The simulation viewer has no scenarios | Run `Train_Proprioception.py` first to create `training_steps.csv`. |
 
-| Symptom | What to check |
-| --- | --- |
-| Cannot open the hardware serial port | Set `Connection.Port` to the device on your system and check power, USB connection, baud rate, and motor IDs. |
-| MuJoCo viewer fails on macOS | Run with `mjpython` from the environment in which MuJoCo is installed and use a desktop session. |
-| GUI moves but the hand does not | Check `Connection.mode` and any connection warning; the GUI can fall back to a mock robot. |
-| Kinematics or vision import fails | Install SciPy, OpenCV, and MediaPipe as applicable; run from the repository root. |
-| Training viewer has no scenarios | Run `python Train_Proprioception.py` to generate `training_steps.csv`. |
-| Model reports changed settings | Retrain after changing the grasp, object list, or training settings. |
-| Recognition returns `unknown` | Read `recognition_result.json` for the rejection reason and compare measured angles with `simulation.csv`. |
-
-## Current limitations
-
-- `SimHand` is a kinematic MuJoCo viewer, not a dynamic motor model. The separate recognition simulator checks mesh collision, while the real grasp uses motor current. The nine real trials quantify a gap for three objects at one size each; correcting it across sizes still needs experiments.
-- The recognition data use one fixed object pose, one CAD model per class, and uniform scale variation. The model receives final joint angles only. Unknown-object detection has not been tested against a separate set of unseen classes.
-- Vision calibration constants are local to the vision scripts, and `LeapKinematics.JOINT_LIMITS` have not yet been updated to match the widened URDF limits at joints 0, 8, 13, and 14.
-- The direct-angle vision script's preview/Q-key exit is currently commented out. The motion-teaching script's combined menu option is currently broken; its separate stages work as the intended route.
-- `test1.py` is a manual state display, not an automated test suite. The GUI's mock fallback is useful for editing poses but cannot verify physical motion.
-
-The included manuscript centers the planned 20-object physical-only neural study and reports the available three-object neural and four-object household nearest-trial pilots. It does not claim a completed 20-class result.
+The fixed-pose simulation uses one CAD model per class and direct position stepping; it does not reproduce real compliance or current-triggered stopping. The physical-only pilots use few object instances and repeats, and the 20-object study remains planned. Neither rejection rule has been evaluated against a dedicated unseen-object test set. The repository has no automated hardware or camera test suite; validate each workflow on the actual setup before reporting research performance.
