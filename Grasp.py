@@ -8,7 +8,7 @@ from utils.Constants import Connection, Proprioception
 
 
 def grasp(leap_hand, on_angles=None):
-    grip = Proprioception.grip
+    grip = Proprioception.grip1
     current_positions = grip["start_angles"].copy()
     stopped_fingers = [False] * 4
     log = []
