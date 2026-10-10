@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex manuscript"] 1791549180.80359 "manuscript.aux" "manuscript.bbl" "manuscript" 1791549182.62387 0
-  "./elsart-harv.bst" 1791098494.6924 30899 c671456f0e0b7d57902a66ed8187f2c7 ""
-  "./manuscript.bib" 1791549175.91977 2006 8afc03d394fdb932aca2da8bd8d6de3a ""
-  "manuscript.aux" 1791549182.01312 3425 add8cc6e07357a6b2a063d51116408d1 "lualatex"
+["bibtex manuscript"] 1791620226.30003 "manuscript.aux" "manuscript.bbl" "manuscript" 1791620227.27259 0
+  "./elsart-harv.bst" 1791598648.20431 30899 c671456f0e0b7d57902a66ed8187f2c7 ""
+  "./manuscript.bib" 1791598648.20459 2006 8afc03d394fdb932aca2da8bd8d6de3a ""
+  "manuscript.aux" 1791620226.95901 3514 3e5dfda170522922fbed5ed394c0ccf3 "lualatex"
   (generated)
   "manuscript.bbl"
   "manuscript.blg"
   (rewritten before read)
-["lualatex"] 1791549181.01978 "/Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/manuscript.tex" "manuscript.pdf" "manuscript" 1791549182.62412 0
+["lualatex"] 1791620226.37927 "/Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/manuscript.tex" "manuscript.pdf" "manuscript" 1791620227.27277 0
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmmono12-regular.luc" 1755942373.69196 81772 3c7ee58f252b3fad09bb8f8cb378bbcb ""
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-italic.luc" 1790856242.07056 136312 6547331b6da4bca63f5ef335e1edeaad ""
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-regular.luc" 1755942371.70641 127327 1c39dfa079191ba7430719f0296074a7 ""
@@ -17,7 +17,7 @@
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmroman17-regular.luc" 1790856241.98898 128921 07adb2945086befdab18eaf5c6037ccb ""
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmroman8-regular.luc" 1790856242.02923 128146 725fe7f98082e4316d75600fb2954f4b ""
   "/Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/names/luaotfload-names.luc.gz" 1755942371.66608 405813 0cdc1dfeed061b304b8c13418ad3b8ee ""
-  "/Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/manuscript.tex" 1791549160.56668 18445 dc1a91309277f684b56b1bc674ba6066 ""
+  "/Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/manuscript.tex" 1791620085.2474 16846 9e4766f0f67e330c491661a9541aa39b ""
   "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm/lmmono12-regular.otf" 1255129361 63012 5db69ad3c177ae338e5504d80d9e9eb6 ""
   "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.otf" 1255129361 111536 ae9d1b331000d544f47e5223081b7b54 ""
   "/usr/local/texlive/2025/texmf-dist/fonts/opentype/public/lm/lmroman12-bold.otf" 1255129361 110496 b9c8767d4cc3bf3f4b21f676bf89aa78 ""
@@ -48,7 +48,6 @@
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb" 1248133631 32080 340ef9bf63678554ee606688e7b5339d ""
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb" 1248133631 30251 6afa5cb1d0204815a708a080681d4674 ""
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb" 1248133631 36741 fa121aac0049305630cf160b86157ee4 ""
-  "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb" 1248133631 37166 8ab3487cbe3ab49ebce74c29ea2418db ""
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb" 1248133631 35469 70d41d2b9ea31d5d813066df7c99281c ""
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb" 1248133631 32722 d7379af29a190c3f453aba36302ff5a9 ""
   "/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb" 1248133631 32726 0a1aea6fcd6468ee2cf64d891f5c43c8 ""
@@ -165,12 +164,12 @@
   "/usr/local/texlive/2025/texmf-dist/tex/luatex/luaotfload/luaotfload.lua" 1740687098 13566 16df94dd2de231b2bca0aaa0190941fe ""
   "/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1752928225 5467155 19efa205003f9ecad95fbbaa6ff24da1 ""
   "/usr/local/texlive/2025/texmf-var/web2c/luahbtex/lualatex.fmt" 1752928197 5583697 6e8a147705a7c2d76ab00fadf31df397 ""
-  "elsarticle.cls" 1791098494.69262 26871 c5a0163ae9238174f415927db0e4015e ""
-  "manuscript.aux" 1791549182.01312 3425 add8cc6e07357a6b2a063d51116408d1 "lualatex"
-  "manuscript.bbl" 1791549181.01461 1683 837d99c6ab13606245772777db593dcc "bibtex manuscript"
-  "manuscript.out" 1791549182.0138 1777 932b94788abfe10be43a4bed65e83299 "lualatex"
-  "manuscript.spl" 1791549181.62798 0 d41d8cd98f00b204e9800998ecf8427e "lualatex"
-  "manuscript.tex" 1791549160.56668 18445 dc1a91309277f684b56b1bc674ba6066 ""
+  "elsarticle.cls" 1791598648.20442 26871 c5a0163ae9238174f415927db0e4015e ""
+  "manuscript.aux" 1791620226.95901 3514 3e5dfda170522922fbed5ed394c0ccf3 "lualatex"
+  "manuscript.bbl" 1791620226.37727 1411 bbdc2a550f4bc5c720aebce339d8eb30 "bibtex manuscript"
+  "manuscript.out" 1791620226.95961 2206 6d3ba23d14afb6bc6f16aaf7edca7a3b "lualatex"
+  "manuscript.spl" 1791620226.70045 0 d41d8cd98f00b204e9800998ecf8427e "lualatex"
+  "manuscript.tex" 1791620085.2474 16846 9e4766f0f67e330c491661a9541aa39b ""
   (generated)
   "manuscript.aux"
   "manuscript.log"

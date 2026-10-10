@@ -11,30 +11,30 @@
 
 \begin{frontmatter}
 
-\title{Toward Proprioceptive Recognition of Twenty Household Objects with a LEAP Hand}
+\title{Physical-Only Proprioceptive Recognition of Household Objects
+with a LEAP Hand: A Four-Class Pilot Toward Twenty Classes}
 
 \author{G.~Sai~Pranav}
 \author{Harish J.~Palanthandalam-Madapusi}
 
 \begin{abstract}
 Robotic hands commonly use vision or dedicated tactile sensors to
-recognize objects. This study investigates whether the final joint
-configuration of a physical LEAP Hand can instead identify household
-objects after a controlled grasp. The proposed experiment comprises
-20 labeled household objects, with repeated real-hand grasps for each
-object. Motor current indicates contact and stops the entire contacted
-finger. The resulting 16 joint angles are the only inputs to a small
-neural classifier. Training uses physical trials alone, with small
-angle perturbations applied after splitting the real trials for
-validation. Repeated grasps can be combined when a single prediction
-is uncertain. The available pilot dataset contains three geometric
-objects with three physical trials each. In three-fold held-out-trial
-validation, the neural model classified all nine trials correctly.
-A separate four-object household pilot produced 11 correct predictions
-in 12 leave-one-trial-out tests using a nearest-trial baseline; a
-household neural model has not yet been trained. These results support
-the feasibility of collecting and classifying physical grasp data,
-but do not establish accuracy for the planned 20-object study.
+recognize objects. This study examines whether a physical LEAP Hand
+can identify household items using only the joint angles reached
+after controlled grasps. Motor-current thresholds stop an entire
+finger when resistance is detected. Final angles from an ordered
+sequence of grips form the input to a compact neural classifier;
+all training measurements come from the physical hand. The planned
+study will enroll 20 household objects. The available household
+pilot contains a ball, bottle, bowl, and computer mouse, with three
+real trials per class. Its earlier single-grip neural model correctly
+classified 11 of 12 held-out trials in three-fold validation
+(91.7\%). Ten predictions passed its confidence and distance rules,
+and all ten were correct. A nearest-trial baseline also scored 11/12.
+The current software supports three sequential grips, but no
+three-grip or 20-class performance has yet been measured. These
+pilot results demonstrate recognition among the four recorded items;
+the broader accuracy and robustness questions remain open.
 \end{abstract}
 
 
@@ -66,30 +66,30 @@ used grasp information for kinesthetic object recognition without
 dedicated tactile sensors. More recently, \citet{Kutsuzawa2024}
 investigated learning-based shape and stiffness estimation from
 joint angles and velocities in a multi-fingered hand. These studies
-motivate a physical-hand experiment using a deliberately simple
-observation: the final joint angles of one standardized grasp.
+motivate a physical-hand experiment using a simple observation:
+the final joint angles of a repeatable grip sequence.
 
-The main research question is whether this 16-angle observation can
-distinguish 20 enrolled household objects when all data are collected
-with the physical LEAP Hand. A second question is whether combining
-repeated grasps improves decisions that are uncertain after one grasp.
+The main research question is whether final angles from the physical
+LEAP Hand can distinguish 20 enrolled household objects. A second
+question is whether combining repeated grip sequences improves
+decisions that are uncertain after one sequence.
 The model predicts object identity, rather than object size. Unless
 multiple examples of a household category are collected, each label
 refers to one physical item; recognition of another item of the same
 kind is a separate generalisation question.
 
-The present implementation provides a repeatable grasp, a resumable
+The present implementation provides repeatable grips, a resumable
 physical-data collection procedure, a neural classifier, a
 nearest-trial comparison method, and an interface for running the
 hand and viewing the results. The available physical trials permit a
-preliminary evaluation, while the larger 20-object experiment remains
-to be completed. The pilot findings are reported separately from the
-proposed full experiment.
+preliminary four-object evaluation. The planned 20-object experiment
+has not yet been completed, so its performance is not inferred from
+the pilot.
 
 \section{Experimental Setup and Methodology}
 \label{sec:methods}
 
-\subsection{Physical hand and exploratory grasp}
+\subsection{Physical hand and controlled grips}
 \label{sec:grasp}
 
 We used a four-fingered LEAP Hand with 16 actuated joints
@@ -97,95 +97,101 @@ We used a four-fingered LEAP Hand with 16 actuated joints
 ordered as index joints 0--3, middle joints 4--7, ring joints
 8--11, and thumb joints 12--15. All recorded angles were
 expressed in degrees. Objects were presented at a consistent
-position relative to the palm, and the same programmed grasp
-was used for every object. This controlled placement is an
+position relative to the palm, with 2cm variation in position and 10 degree variation in orientation,
+ and the same programmed grip
+sequence was used for every object. This controlled placement is an
 experimental condition rather than a property of the model.
 
-The hand first moved to a configured open posture. Each joint
-then advanced towards a specified final angle in one-degree
-steps. During closure, motor current served as an indicator
-of resistance from contact. If the measured current of any
-joint in a finger exceeded its configured threshold in the
-direction of motion, all four joints of that finger stopped
-at their measured positions. The other fingers continued
-until they encountered resistance or reached their target
-angles. A run ended when all four fingers had stopped;
-it was aborted if it exceeded 250 iterations.
+For each configured grip, the hand moved to that grip's starting
+posture. Its 16 joints then advanced toward specified targets using
+the per-joint step sizes in the experiment settings. During closure,
+motor current served as an indicator of resistance. If a moving
+joint's signed current exceeded its configured threshold, all four
+joints of that finger stopped at their measured positions. The
+remaining fingers continued until resistance or an angle target
+stopped them. A grip ended when all four fingers had stopped and
+was aborted after at most 250 iterations. The hand moved to the
+next grip's starting posture before continuing the sequence.
 
-After closure, the program read the final 16 joint angles.
-A temporary loss of position reporting was handled by
-retrying the final read for up to 10 seconds. During data
-collection, the angles and full grasp log were saved before
-the hand returned to its open posture. Motor currents were
-used to control the grasp; they were not passed to the
-classifier. No camera images, tactile arrays, simulated
-contacts, or object meshes were used to train the
-physical-only model.
+After each grip, the program read its final 16 joint angles,
+retrying for up to 10 seconds if position reporting was temporarily
+unavailable. The final vectors were concatenated in grip order.
+The current settings contain three grips, yielding 48 input angles
+per physical trial. 
+
+During collection, the final angles and time-series log were saved
+before the hand returned to its starting posture. Motor currents
+controlled the movement but were not classifier inputs. No camera
+images or tactile arrays were used as recognition features.
 
 \subsection{Physical dataset and proposed 20-object experiment}
 \label{sec:dataset}
 
-Each training record consists of a household-object label
-and one final angle vector,
+Each training record consists of a household-object label and
+one concatenated final-angle vector,
 \[
-\mathbf{q}_i=(q_{i0},q_{i1},\ldots,q_{i15})\in\mathbb{R}^{16}.
+\mathbf{q}_i=
+\left[\mathbf{q}_i^{(1)},\ldots,\mathbf{q}_i^{(G)}\right]
+\in\mathbb{R}^{16G},
 \]
+where \(G\) is the number of configured grips and each
+\(\mathbf{q}_i^{(g)}\) contains the 16 final joint angles
+from grip \(g\).
 The data-collection program stores every completed trial
 with its final angles and time-series log. It also saves a
 collection plan before recording begins, so interrupted
 sessions can resume without discarding earlier trials.
-Additional trials and new classes can be added later.
+Additional trials and new classes can be added later. A mistaken
+trial may be retaken; the previous record is archived after a
+complete replacement has been checked.
 
 The intended full study contains 20 distinct household
-objects, with a target of ten physical grasps per object,
-or 200 labeled trials. The selected objects should be
+objects, with a target of five to ten independent physical trials
+per object, or 100--200 labeled trials. The selected objects should be
 graspable within the hand's configured motion limits and
 should vary in geometry and size. Their names, dimensions,
 and placement orientation will be recorded with the
 dataset. Repeated grasps should include natural variation
 in reseating the same object. A separate later session
 should be reserved to test changes in placement and hand
-state. These 20-object trials have not yet been collected
-in the repository examined for this manuscript.
+state. 
 
-Two smaller physical datasets are currently available.
-The first has three trials each of a 7.5~cm side-length
-cube, a 7.5~cm diameter sphere, and a 5.0~cm diameter
-cylinder. The second has three trials each of a ball,
-bottle, bowl, and computer mouse. The first dataset is
-used below to examine the neural model; the second
-provides a household-object nearest-trial baseline.
-These datasets do not contain a trained 20-class model.
+The available household pilot has three trials each of a ball,
+bottle, bowl, and computer mouse. Both the neural classifier and
+nearest-trial baseline were evaluated on these 12 measurements.
+All trials came from physical objects and used the earlier
+single-grip configuration. 
 
 \subsection{Neural network and training}
 \label{sec:model}
 
-The neural network receives only the final 16 joint
-angles. Before training, each angle is normalized by
-the configured start and target angles:
+The neural network receives only the \(16G\) final joint
+angles. Each angle is normalized by the start and target
+angles of its grip and joint:
 \[
-x_j=\frac{q_j-a_j}{b_j-a_j},
+x_{g,j}=\frac{q_{g,j}-a_{g,j}}{b_{g,j}-a_{g,j}},
 \]
-where \(a_j\) and \(b_j\) are the start and target
-angles for joint \(j\). A joint with equal start and
+where \(a_{g,j}\) and \(b_{g,j}\) are the start and target
+angles for joint \(j\) in grip \(g\). A joint with equal start and
 target values is assigned a normalized value of zero.
 
-The classifier has 16 input units, one fully connected
+The classifier has \(16G\) input units, one fully connected
 24-unit hidden layer with a hyperbolic tangent activation,
 and one output for each enrolled object. A softmax
 operation converts the outputs to class probabilities.
-For \(C\) classes, the model has \(408+25C\) trainable
-parameters. Thus, the planned 20-class model would have
-908 parameters. It does not predict object size.
+For \(C\) classes, the model has \(384G+24+25C\) trainable
+parameters. The current three-grip, 20-class design would have
+1,676 parameters; the historical single-grip, four-class pilot
+had 508. The model does not predict object size.
 
 We used full-batch Adam optimization with a learning
 rate of 0.01, weight decay of 0.001, and a limit of 500
-epochs. Each real grasp was retained and supplemented
+epochs. Each real trial was retained and supplemented
 with 20 noisy copies during training. Independent
 zero-mean Gaussian noise with a standard deviation of
-\(0.5^\circ\) was added to each joint. A second
+\(0.5^\circ\) was added to each angle. A second
 \(0.5^\circ\) Gaussian perturbation was shared by the
-four joints of each finger. These artificial copies
+four joints of each finger within each grip. These artificial copies
 approximate small measurement and grasp variation; they
 are not counted as additional physical trials. Samples
 were weighted inversely to the number of real trials in
@@ -220,12 +226,12 @@ known-class trials; their ability to reject genuinely
 unseen objects has not yet been evaluated.
 
 If a neural prediction remains uncertain, the program
-can request another grasp of the same object, up to
-three grasps. The class probabilities are averaged
-across grasps, while the nearest-trial distances are
-combined using their median. The resulting decision
-is saved along with each individual grasp. A separate
-nearest-trial method assigns the class of the saved
+can request another trial of the same object, up to
+three trials. Each trial runs the configured grip sequence.
+The class probabilities are averaged across trials, while
+the nearest-reference distances are combined using their
+median. The resulting decision is saved with each trial.
+A separate nearest-trial method assigns the class of the saved
 physical grasp with the smallest Euclidean distance
 in degrees. That method supplies a comparison baseline;
 it does not produce probabilities or an unknown-object
@@ -245,157 +251,127 @@ folded evaluation does not substitute for those tests.
 \subsection{Software implementation}
 \label{sec:software}
 
-The grasp and physical-only training programs are part
-of Ex-ARM \citep{ExARM}. The same interface can collect
-or extend a dataset, train either model, and run the
-physical hand for recognition. A presentation window
-shows the final decision and the neural probabilities
-for every enrolled class. Its side panel visualizes
-the measured hand pose using a MuJoCo rendering of the
-hand \citep{TodorovErezTassa2012}. This rendering is
-used for display only; the physical-only classifier
-is trained from measured hand angles.
+The grip and physical-only training programs are part
+of Ex-ARM \citep{ExARM}. The terminal interface can
+collect, resume, extend, and retake physical trials,
+train either model, and run the hand for recognition.
+The presentation window shows the final decision,
+the neural probabilities for every enrolled class,
+and a visualization driven by the measured hand pose.
+The classifier itself uses only recorded physical angles.
 
 \section{Results and Discussion}
 \label{sec:results}
 
-\subsection{Available physical pilot results}
+\subsection{Four-object household pilot}
 \label{sec:pilot_results}
 
-Table~\ref{tab:pilot} summarises the physical
-measurements available at the time of writing. In the
-geometric-object pilot, the neural classifier correctly
-classified all nine held-out real trials in three-fold
-validation. Each class contributed three trials, and
-checks. This acceptance count is descriptive because
-the distance and probability settings were selected
-from the same folded validation data. The final neural
-model was subsequently trained on all nine physical
-trials.
+The available household dataset contains 12 physical trials:
+three each for a ball, bottle, bowl, and computer mouse.
+All four labels refer to the specific items recorded.
+These measurements used the earlier single-grip, 16-angle
+configuration. The current three-grip version of the
+software has not yet been evaluated on these objects.
 
-The separate household-object dataset contains a ball,
-bottle, bowl, and computer mouse, with three trials per
-object. The nearest-trial method classified 11 of the
-12 trials correctly when each trial was removed in turn
-from the training set. One ball trial was assigned to
-the bottle class. This household result belongs to the
-nearest-trial baseline; no neural model has yet been
-trained or evaluated on this dataset.
+In three-fold validation, the neural classifier assigned
+the correct class to 11 of the 12 held-out trials
+(91.7\%). The one error assigned a ball trial to the
+bottle class. Table~\ref{tab:pilot} gives the
+per-class counts. The final model was then trained on
+all 12 trials; this training step is distinct from the
+held-out evaluation. A nearest-trial baseline also
+classified 11 of 12 trials correctly in
+leave-one-trial-out evaluation.
 
 \begin{table}[ht]
 \centering
-\caption{Results from the available physical pilot datasets.
-The neural and nearest-trial rows use different objects
-and evaluation methods.}
+\caption{Held-out neural predictions for the physical
+household pilot. Each row contains three real trials.
+The single error was a ball predicted as a bottle.}
 \label{tab:pilot}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
-Physical dataset & Classes & Trials & Method &
-Correct \\
+Actual item & Ball & Bottle & Bowl & Mouse & Correct \\
 \midrule
-Geometric objects & 3 & 9 & Three-fold neural & 9/9 \\
-Household objects & 4 & 12 & Leave-one-trial-out
-nearest & 11/12 \\
+Ball   & 2 & 1 & 0 & 0 & 2/3 \\
+Bottle & 0 & 3 & 0 & 0 & 3/3 \\
+Bowl   & 0 & 0 & 3 & 0 & 3/3 \\
+Mouse  & 0 & 0 & 0 & 3 & 3/3 \\
+\midrule
+Total  &   &   &   &   & 11/12 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The geometric pilot demonstrates that its three
-particular objects produced distinguishable joint-angle
-patterns across the recorded grasps. The household
-baseline suggests that a similar physical-data
-collection process can be used for everyday objects.
-Neither result measures the accuracy of a neural
-classifier trained on 20 household objects. All
-training and validation trials in each pilot involve
-the same physical exemplars, with only three recorded
-grasps per class.
+When the pilot's probability, margin, and distance rules
+were applied, ten of the 12 held-out predictions were
+accepted as known classes. All ten accepted predictions
+were correct; two were marked uncertain and none were
+marked unknown. This 10/10 accepted result is descriptive:
+the temperature and distance limit were selected using
+the same folded validation predictions. It is not an
+independent estimate of the acceptance rule's accuracy.
+No item excluded from the four training classes was used
+to evaluate unknown-object rejection.
 
-\subsection{Implications for the 20-object study}
+\subsection{Interpretation and study limitations}
 \label{sec:discussion}
 
-The larger study asks a more demanding question than
-either pilot. As additional objects are enrolled,
-different items may lead to similar final joint
-configurations. A water bottle and another cylindrical
-container, for example, might stop the fingers at
-similar angles when placed at the same point. The
-classifier must then rely on the small differences
-that remain in the 16-angle vector. The planned
-confusion matrix and per-class results will identify
-which objects are difficult to distinguish.
+The pilot supports a narrow conclusion: final joint angles
+from a controlled physical grasp distinguished these four
+recorded items in 11 of 12 held-out trials. It does not
+show that the classifier can recognize 20 different
+household objects. Three trials per class give a limited
+view of within-item variation, and the validation trials
+came from the same physical exemplars and collection
+setting as the training trials. The results do not measure
+generalization to another bottle, ball, bowl, or mouse,
+to a later session, or to changed placement.
 
-The current neural training procedure perturbs
-recorded angles after the training and validation
-trials are separated. This protects the held-out
-measurements from direct duplication, but artificial
-noise cannot represent every source of physical
-variation. Changes in object placement, motor
-calibration, friction, compliance, and contact force
-may alter the final angles in ways that are not
-equivalent to small Gaussian perturbations. Collecting
-additional real grasps across sessions is therefore
-important for the intended 20-object experiment.
+The three-grip design may provide additional information
+when one grip leaves two objects in similar joint postures.
+It also makes a trial longer and may disturb the object
+while the hand returns to the next starting posture.
+Those effects must be measured rather than assumed.
+The four-object pilot results cannot be transferred to the
+three-grip configuration because its inputs, grip motions,
+and saved model are different.
 
-The confidence and distance rules can decline to
-assign a known label, and repeated grasps can
-combine several observations of the same item.
-However, the reported pilot tests contain only
-trained classes. The thresholds were selected from
-known-class validation data. A high class
-probability therefore does not establish that an
-unseen object will be rejected correctly. Objects
-excluded from all training, together with independent
-placement and session tests, are required to measure
-the behavior of the \emph{unknown} and \emph{uncertain}
-outputs.
-
-The work differs from the earlier simulation-based
-shape-and-size approach in the Ex-ARM project. Here,
-the neural network is trained only on measurements
-from the physical hand and predicts the identity of
-an enrolled object. It makes no continuous size
-estimate. This choice avoids assuming that simulated
-contact angles match the angles reached when real
-motors exert force before their current thresholds
-are exceeded. The resulting model must instead obtain
-its variation from repeated physical grasps.
-
-Prior studies have demonstrated the value of
-proprioceptive information for object recognition
-and property estimation
-\citep{VasquezPerdereau2017,SintovMeir2023,Kutsuzawa2024}.
-The present implementation contributes a compact
-physical-hand classifier and a repeatable procedure
-for gathering, extending, and evaluating a labeled
-grasp dataset. Its present evidence is preliminary.
-The 20-object study is needed before claims about
-household-object recognition accuracy can be made.
+For the 20-object study, each class should have several
+independent placements, and trials should be collected
+across multiple sessions. In addition to a trial-level
+split, a later session should be held out until the model
+and its decision thresholds are fixed. Reporting the
+confusion matrix, per-class recall, overall raw accuracy,
+coverage, and accuracy among accepted predictions will
+show which item pairs are difficult to separate. Objects
+excluded from all training are needed to evaluate the
+\emph{unknown} output. Repeated-sequence recognition
+should be compared with a single sequence on the same
+held-out cases to determine whether another observation
+improves the decision.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-This study describes a physical-only proprioceptive
-recognition system for the LEAP Hand. A standardized
-grasp stops each finger when motor current indicates
-contact, and a small neural network classifies an
-object from the final 16 joint angles. The proposed
-experiment will enroll 20 household objects and use
-repeated physical grasps to evaluate class accuracy,
-uncertain decisions, and the value of combining
-multiple grasps.
+This work develops a physical-only proprioceptive
+recognition procedure for a LEAP Hand. Motor-current
+thresholds stop contacted fingers, and a compact neural
+network predicts object identity from final joint angles.
+The software now supports an ordered sequence of three
+grips, giving 48 angle inputs per trial, as well as
+resumable collection, trial retakes, and repeated
+recognition attempts.
 
-The available three-object neural pilot classified
-nine of nine held-out physical trials correctly.
-A separate four-object household nearest-trial
-baseline classified 11 of 12 trials correctly.
-These results establish a starting point for the
-larger physical study, but do not establish the
-performance of a 20-class neural model. Completing
-the 20-object dataset and testing later sessions,
-placement variation, and objects withheld from
-training will be necessary to assess reliability
-and unknown-object rejection.
+The available household pilot used the earlier
+single-grip configuration. Its neural classifier
+correctly identified 11 of 12 held-out physical trials
+from a ball, bottle, bowl, and mouse. Ten of 12 predictions
+passed its acceptance rules, and all ten were correct.
+These findings establish a promising four-item pilot.
+Collecting and evaluating the 20-class, three-grip
+dataset is the next step before claiming accurate
+recognition across 20 household objects.
 
 \bibliographystyle{elsart-harv}
 \bibliography{manuscript}

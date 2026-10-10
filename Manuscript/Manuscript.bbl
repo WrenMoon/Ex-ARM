@@ -1,4 +1,4 @@
-\begin{thebibliography}{6}
+\begin{thebibliography}{5}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 \expandafter\ifx\csname url\endcsname\relax
   \def\url#1{\texttt{#1}}\fi
@@ -15,9 +15,6 @@ Shaw, K., Agarwal, A., Pathak, D., 2023. Leap hand: Low-cost, efficient, and ant
 
 \bibitem[{Sintov and Meir(2023)}]{SintovMeir2023}
 Sintov, A., Meir, I., 2023. Simple kinesthetic haptics for object recognition. The International Journal of Robotics Research 42~(7), 537--561.
-
-\bibitem[{Todorov et~al.(2012)Todorov, Erez, and Tassa}]{TodorovErezTassa2012}
-Todorov, E., Erez, T., Tassa, Y., 2012. {MuJoCo}: A physics engine for model-based control. In: 2012 IEEE/RSJ International Conference on Intelligent Robots and Systems. IEEE, pp. 5026--5033.
 
 \bibitem[{V{\'a}squez and Perdereau(2017)}]{VasquezPerdereau2017}
 V{\'a}squez, A., Perdereau, V., 2017. Proprioceptive shape signatures for object manipulation and recognition purposes in a robotic hand. Robotics and Autonomous Systems 98, 135--146.
