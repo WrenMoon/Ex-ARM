@@ -2,10 +2,28 @@
 
 Ex-ARM is a Python project for a 16-joint LEAP Hand. It brings together Dynamixel motor control, a MuJoCo hand viewer, forward and inverse kinematics, webcam teleoperation, a pose-sequencing GUI, recorded motion replay, and proprioceptive object recognition. Each tool can be used independently to control, observe, teach, or study the hand.
 
-The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps, and nine physical grasps now support separate nearest-trial and neural class-only experiments. Recognition accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) describes the simulated study and has not yet been updated with these physical trials.
+The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps. Separate physical trials support nearest-trial and neural class-only experiments; accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object physical-only study and reports the available pilot results.
+
+## Start here
+
+After [setting up Python](#setup), run `python Project.py`. This opens a terminal menu for the existing programs; it does not change their code or datasets. Direct commands in the rest of this README still work. The launcher starts programs from the repository root so their relative data paths resolve correctly, and uses `mjpython` for MuJoCo viewers on macOS.
+
+| Goal | Main menu | Next step |
+| --- | --- | --- |
+| Collect or resume real-hand object trials | **1 Physical-only object recognition** | Choose **1** in the physical-only menu, then enter a dataset name. |
+| Add classes or trials to a physical dataset | **1 Physical-only object recognition** | In its terminal menu choose **5** and then retrain the neural model with **6**. |
+| Identify an object with the physical-only neural model | **1 Physical-only object recognition** | In its terminal menu choose **7** and enter the trained dataset name. |
+| Present the physical-only system | **1 Physical-only object recognition** | Choose **2** to open the UI. |
+| Train or inspect the separate simulation model | **2 Simulation-trained object recognition** | Train first, then view the recorded grasps. Recognition with that model uses the real hand. |
+| Edit poses, use vision control, or inspect the hand | **3–5** | Choose the corresponding tool from its submenu. |
+
+Use a new dataset name for each physical study. The `initial_9` dataset is the three-object pilot; it should not be used as the collection name for the planned 20-object study. Raw trials, trained models, reports, and recognition runs for a physical dataset stay together under [`Data/Proprioception/Physical_Only/`](Data/Proprioception/Physical_Only/) in a folder named after that dataset. The simulation-trained workflow has its own model and output files directly under [`Data/Proprioception/`](Data/Proprioception/); training it regenerates those files. The two recognition models are separate.
+
+Before running a motor-control tool, check [`Connection.mode`, `Connection.Port`, motor IDs, and offsets](utils/Constants.py). The checked-in settings currently select `"both"` and `"COM3"`; set them for your computer and intended backend. Physical-only collection always opens the real hand. The configured grasp and its current limits are in `Proprioception.grip` in the same file.
 
 ## Contents
 
+- [Start here](#start-here)
 - [What is included](#what-is-included)
 - [Setup](#setup)
 - [Architecture and joint conventions](#architecture-and-joint-conventions)
@@ -29,6 +47,7 @@ The project is under active development. The simulation-trained class-and-size m
 | Pose editing and playback | [`Ex-GUI.py`](Ex-GUI.py), [`Pose_Sequence_Runner.py`](Pose_Sequence_Runner.py) | Build, save, and play 16-joint pose sequences. |
 | Proprioception research | [`Grasp.py`](Grasp.py), [`Train_Proprioception.py`](Train_Proprioception.py), [`View_Proprioception.py`](View_Proprioception.py), [`Run_Proprioception.py`](Run_Proprioception.py) | Generate simulated grasps, train a class-and-size model, inspect trials, and run recognition on the physical hand. |
 | Physical-only experiment | [`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py), [`utils/PhysicalOnlyNetwork.py`](utils/PhysicalOnlyNetwork.py) | Collect and extend physical datasets; compare nearest-trial and neural class recognition. |
+| Project launcher | [`Project.py`](Project.py) | Open the existing tools from one terminal menu. |
 | Diagnostics and utilities | [`test1.py`](test1.py), [`utils/BoxPrinter.py`](utils/BoxPrinter.py), [`utils/URDF_Convertor.py`](utils/URDF_Convertor.py) | Display live motor state and assist with URDF mesh paths. |
 
 The [`Data/`](Data/) folder contains the hand model, three STEP objects, example pose series, the MediaPipe hand landmark model, saved GUI sessions, and generated recognition data. The [`Manuscript/`](Manuscript/) folder contains the LaTeX research manuscript and its PDF.
@@ -82,7 +101,7 @@ This is the order accepted by `ExArm.set_goal_positions_degree()` and returned b
 
 ### Connection settings
 
-[`utils/Constants.py`](utils/Constants.py) defines `Connection.mode`, `Port`, `baudrate`, `ids`, `offsets`, and `model_path` for the general control tools. The checked-in values are `mode="sim"`, `Port="COM3"`, 4,000,000 baud, IDs 0–15, zero angle offsets, and `Data/Leap_Model/mujoco_robot.urdf`. Set the port and calibrations for your own hardware before changing the mode to `real` or `both`. The proprioception runner has its own `Proprioception.hand_mode`, described later.
+[`utils/Constants.py`](utils/Constants.py) defines `Connection.mode`, `Port`, `baudrate`, `ids`, `offsets`, and `model_path` for the general control tools. The checked-in values are `mode="both"`, `Port="COM3"`, 4,000,000 baud, IDs 0–15, zero angle offsets, and `Data/Leap_Model/mujoco_robot.urdf`. Set the mode, port, and calibrations for your intended backend and hardware. The proprioception runner has its own `Proprioception.hand_mode`, described later.
 
 A minimal `ExArm` session uses the configured backend:
 
@@ -106,7 +125,7 @@ finally:
     hand.close()
 ```
 
-With the default `sim` mode this opens the hand viewer. For direct low-level control, `LeapHand` exposes `set_torque_enabled()`, `set_goal_positions_degree()`, `get_state()`, operating-mode and goal-current helpers, and `close_port()`. It uses synchronized position writes and a bulk read of position, velocity, and current from all motors. It converts degrees to motor ticks using the configured offsets and a 180° position bias. Measured velocities and currents are the signed values read from Dynamixel registers.
+With the checked-in `both` mode this opens the hand viewer and connects to the real hand. For direct low-level control, `LeapHand` exposes `set_torque_enabled()`, `set_goal_positions_degree()`, `get_state()`, operating-mode and goal-current helpers, and `close_port()`. It uses synchronized position writes and a bulk read of position, velocity, and current from all motors. It converts degrees to motor ticks using the configured offsets and a 180° position bias. Measured velocities and currents are the signed values read from Dynamixel registers.
 
 While `ExArm` is active, its keyboard listener uses **Space** to disable torque and interrupt the main program. Keep cleanup in a `finally` block when writing a script. [`test1.py`](test1.py) is a manual state monitor: it uses [`utils/BoxPrinter.py`](utils/BoxPrinter.py) to display all positions, velocities, and currents in a live terminal layout. Run it with `python test1.py`, or `mjpython test1.py` on macOS if `Connection.mode` opens the simulation viewer.
 
@@ -184,7 +203,7 @@ Its camera-to-hand calibration mirrors the retargeting script. The combined reco
 - The GUI can copy a pose or sequence to the clipboard as Python-style dictionaries and import a pasted sequence.
 - Manual sessions use [`Data/Ex-GUI/pose_session.json`](Data/Ex-GUI/pose_session.json); autosave uses [`pose_editor_autosave.json`](Data/Ex-GUI/pose_editor_autosave.json).
 
-`RobotController` sends the current GUI angles at roughly 30 Hz when torque is enabled. The application uses `Connection.mode`, so the default connects to the basic MuJoCo viewer. If connection fails, it displays a warning and continues with a mock robot; visible GUI movement then does not mean motors are moving.
+`RobotController` sends the current GUI angles at roughly 30 Hz when torque is enabled. The application uses `Connection.mode`, so the checked-in `both` mode attempts to connect to the real hand and the basic MuJoCo viewer. If connection fails, it displays a warning and continues with a mock robot; visible GUI movement then does not mean motors are moving.
 
 ### JSON pose sequences
 
