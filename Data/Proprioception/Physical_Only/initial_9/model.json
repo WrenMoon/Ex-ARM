@@ -111,6 +111,11 @@
     0,
     0
   ],
+  "trial_counts": {
+    "cube": 3,
+    "cylinder": 3,
+    "sphere": 3
+  },
   "classes": [
     "cube",
     "cylinder",

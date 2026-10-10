@@ -1,0 +1,41 @@
+{
+  "classes": [
+    "cube",
+    "cylinder",
+    "sphere"
+  ],
+  "trial_counts": {
+    "cube": 3,
+    "cylinder": 3,
+    "sphere": 3
+  },
+  "physical_trials": 9,
+  "validation_folds": 3,
+  "validation_correct": 9,
+  "validation_total": 9,
+  "validation_confusion": {
+    "cube": {
+      "cube": 3,
+      "cylinder": 0,
+      "sphere": 0
+    },
+    "cylinder": {
+      "cube": 0,
+      "cylinder": 3,
+      "sphere": 0
+    },
+    "sphere": {
+      "cube": 0,
+      "cylinder": 0,
+      "sphere": 3
+    }
+  },
+  "validation_accepted": 9,
+  "validation_accepted_correct": 9,
+  "validation_unknown": 0,
+  "validation_uncertain": 0,
+  "final_training_epochs": 493,
+  "temperature": 1.0,
+  "distance_limit": 0.11012995598709462,
+  "note": "Validation uses real trials before noise augmentation. Unknown-object rejection has not been validated on unseen classes."
+}

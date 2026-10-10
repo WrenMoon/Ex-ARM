@@ -11,421 +11,391 @@
 
 \begin{frontmatter}
 
-\title{Active Proprioceptive Recognition of Object Shape and Size with a
-LEAP Hand: A Simulation-Based Study}
+\title{Toward Proprioceptive Recognition of Twenty Household Objects with a LEAP Hand}
 
 \author{G.~Sai~Pranav}
-\author{Prof.~Harish J.~Palanthandalam-Madapusi}
+\author{Harish J.~Palanthandalam-Madapusi}
 
 \begin{abstract}
-Can the final joint configuration of one controlled grasp identify both
-the shape and size of a known object type at an unseen scale? We
-investigate this question with a 16-joint LEAP Hand and a reproducible
-simulation-to-hardware pipeline. Three fixed computer-aided-design
-objects---a cube, sphere, and cylinder---are placed at one common pose in
-MuJoCo and uniformly scaled from 50\% to 150\% in 5\% increments. During
-each grasp, collision stops all four joints of a contacted finger. The
-resulting 16 final joint angles train a small neural network to classify
-shape and regress scale; a separate rule rejects ambiguous or distant
-grasps as unknown. On 15 held-out simulated sizes, the network correctly
-classified 13 (86.7\%) and achieved a 1.02\,mm mean absolute
-ground-truth-dimension-weighted scale error. The rejection rule accepted
-three of these 15 grasps, all correctly classified. The physical-hand
-program implements the corresponding grasp using motor current as a
-contact proxy, but this manuscript reports no physical-hand recognition
-trials. The results establish a simulation baseline for joint-angle-only
-recognition under fixed placement, while leaving real-world transfer and
-rejection of genuinely novel objects to future experiments.
+Robotic hands commonly use vision or dedicated tactile sensors to
+recognize objects. This study investigates whether the final joint
+configuration of a physical LEAP Hand can instead identify household
+objects after a controlled grasp. The proposed experiment comprises
+20 labeled household objects, with repeated real-hand grasps for each
+object. Motor current indicates contact and stops the entire contacted
+finger. The resulting 16 joint angles are the only inputs to a small
+neural classifier. Training uses physical trials alone, with small
+angle perturbations applied after splitting the real trials for
+validation. Repeated grasps can be combined when a single prediction
+is uncertain. The available pilot dataset contains three geometric
+objects with three physical trials each. In three-fold held-out-trial
+validation, the neural model classified all nine trials correctly.
+A separate four-object household pilot produced 11 correct predictions
+in 12 leave-one-trial-out tests using a nearest-trial baseline; a
+household neural model has not yet been trained. These results support
+the feasibility of collecting and classifying physical grasp data,
+but do not establish accuracy for the planned 20-object study.
 \end{abstract}
 
+
 \begin{keyword}
-proprioception \sep active perception \sep robotic hand \sep object
-recognition \sep size estimation \sep simulation-to-real transfer
+proprioception \sep active perception \sep LEAP Hand \sep household
+object recognition \sep neural network \sep physical grasping
 \end{keyword}
 
 \end{frontmatter}
 
 \section{Introduction}
+
 \label{sec:introduction}
 
-A robot can obtain information about an object by acting on it. For a
-dexterous hand, the joint configuration reached while closing around a
-surface depends on both the object's geometry and its size. This suggests
-a form of active perception in which the movement of the hand generates
-the observation used for recognition. Motor positions are available on
-the LEAP Hand without an external camera or dedicated tactile skin
-\citep{ShawAgarwalPathak2023}.
+A robot can learn about an object by interacting with it. For a
+dexterous hand, the joint positions reached while closing around an
+object depend on the surfaces that interrupt finger motion. These
+positions may therefore contain information about the object even
+without an external camera or dedicated tactile skin. This use of
+the hand's internal state is known as proprioceptive perception. The
+LEAP Hand is a dexterous, anthropomorphic hand developed for robot
+learning and manipulation \citep{ShawAgarwalPathak2023}.
 
-Prior work demonstrates that hand kinematics can support recognition.
-\citet{VasquezPerdereau2017} constructed proprioceptive shape signatures
-from joint angles and studied recognition across object sizes and poses.
-\citet{SintovMeir2023} used computationally generated grasps for
-kinesthetic object recognition and evaluated recognition of both
-individual instances and broad geometric categories. These studies
-motivate a controlled experiment that asks whether a compact final-angle
-observation can support \emph{both} shape classification and a continuous
-estimate of physical scale.
+Previous work has shown that joint information can support object
+recognition. \citet{VasquezPerdereau2017} developed proprioceptive
+shape signatures from robotic-hand joint angles and studied shape
+identification across object sizes and poses. \citet{SintovMeir2023}
+used grasp information for kinesthetic object recognition without
+dedicated tactile sensors. More recently, \citet{Kutsuzawa2024}
+investigated learning-based shape and stiffness estimation from
+joint angles and velocities in a multi-fingered hand. These studies
+motivate a physical-hand experiment using a deliberately simple
+observation: the final joint angles of one standardized grasp.
 
-The research question here is deliberately narrow: given a fixed object
-mount, a fixed exploratory grasp, and a set of three trained object
-classes, how well can the final 16 joint angles distinguish class and
-estimate size at scales excluded from training? The fixed mount removes
-object-pose variation so that the effect of scale can be examined first.
-The project also implements a matching grasp and prediction program for
-the physical hand. Its intended transfer mechanism replaces simulated
-mesh contact with a motor-current threshold, while preserving the
-four-joint finger stopping rule and final-angle input. This transfer
-mechanism has not yet been evaluated with labeled real-hand trials.
+The main research question is whether this 16-angle observation can
+distinguish 20 enrolled household objects when all data are collected
+with the physical LEAP Hand. A second question is whether combining
+repeated grasps improves decisions that are uncertain after one grasp.
+The model predicts object identity, rather than object size. Unless
+multiple examples of a household category are collected, each label
+refers to one physical item; recognition of another item of the same
+kind is a separate generalisation question.
 
-The contributions of the present implementation are (i) a parameterized
-MuJoCo grasp-data generator for STEP objects and a 16-joint LEAP Hand
-model, (ii) a reproducible joint-angle classifier and size regressor with
-an explicit unknown-output rule, and (iii) a physical-hand execution and
-logging program. The measurements reported below concern the simulated
-data generator and held-out scale evaluation.
+The present implementation provides a repeatable grasp, a resumable
+physical-data collection procedure, a neural classifier, a
+nearest-trial comparison method, and an interface for running the
+hand and viewing the results. The available physical trials permit a
+preliminary evaluation, while the larger 20-object experiment remains
+to be completed. The pilot findings are reported separately from the
+proposed full experiment.
 
-\section{Materials and Methods}
+\section{Experimental Setup and Methodology}
 \label{sec:methods}
 
-\subsection{Hand, software, and object models}
-\label{sec:setup}
-
-The platform is a four-finger, 16-actuator LEAP Hand
-\citep{ShawAgarwalPathak2023}. The logical joint vector is ordered as
-index joints 0--3, middle joints 4--7, ring joints 8--11, and thumb joints
-12--15. All commanded and recorded joint angles in the experiment are in
-degrees. MuJoCo stores joint coordinates internally in radians
-\citep{TodorovErezTassa2012}. The included hand URDF and link meshes define
-the simulated geometry. The URDF limits at joints 0, 8, 13, and 14 were
-expanded to admit the configured grasp; no simulation-to-hardware angle
-offset is currently applied.
-
-Three STEP models are used: a cube, sphere, and cylinder. The reference
-cube side length is 50\,mm. The reference diameter is 50\,mm for both the
-sphere and cylinder. Every object is fixed at the same pose relative
-to the simulation frame: translation $(-0.060,-0.037,-0.035)$\,m and
-roll--pitch--yaw orientation $(-180^\circ,0^\circ,0^\circ)$. STEP
-coordinates are treated as millimetres, converted to metres, and
-multiplied by a uniform scale factor. The same factor changes every
-object dimension, although the model predicts only the designated size
-measure in Table~\ref{tab:objects}.
-
-\begin{table}[ht]
-\centering
-\caption{Simulated object classes and the physical quantity predicted.
-Each class has 21 scales from 50\% to 150\%, inclusive.}
-\label{tab:objects}
-\begin{tabular}{llll}
-\toprule
-Class & Predicted quantity & Reference & Sweep range \\
-\midrule
-Cube & Side length & 50\,mm & 25--75\,mm \\
-Sphere & Diameter & 50\,mm & 25--75\,mm \\
-Cylinder & Diameter & 50\,mm & 25--75\,mm \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{A standardized active grasp}
+\subsection{Physical hand and exploratory grasp}
 \label{sec:grasp}
 
-The grasp uses the same start posture, target posture, and one-degree
-command increments for every simulated object. Table~\ref{tab:grasp}
-specifies the joint vectors in the logical order defined above. Joint
-values are clamped at their target angles. The grasp terminates when all
-four fingers have stopped, with a cap of 250 iterations. A finger stops
-as one unit: contact at any of its links freezes all four joints of that
-finger, while other fingers may continue closing. Reaching all configured
-target angles also stops a finger.
+We used a four-fingered LEAP Hand with 16 actuated joints
+\citep{ShawAgarwalPathak2023}. The recorded joint vector was
+ordered as index joints 0--3, middle joints 4--7, ring joints
+8--11, and thumb joints 12--15. All recorded angles were
+expressed in degrees. Objects were presented at a consistent
+position relative to the palm, and the same programmed grasp
+was used for every object. This controlled placement is an
+experimental condition rather than a property of the model.
 
-\begin{table}[ht]
-\centering
-\caption{Configured grasp angles and per-step increments, in degrees.
-Each bracket contains the four joints of one finger.}
-\label{tab:grasp}
-\small
-\begin{tabular}{llll}
-\toprule
-Finger & Start & Target & Increment \\
-\midrule
-Index & $[0,0,0,0]$ & $[-75,90,90,60]$ & $[-1,1,1,1]$ \\
-Middle & $[0,0,0,0]$ & $[0,80,80,65]$ & $[1,1,1,1]$ \\
-Ring & $[0,0,0,0]$ & $[75,90,90,60]$ & $[1,1,1,1]$ \\
-Thumb & $[0,180,40,25]$ & $[0,100,110,80]$ & $[1,-1,1,1]$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+The hand first moved to a configured open posture. Each joint
+then advanced towards a specified final angle in one-degree
+steps. During closure, motor current served as an indicator
+of resistance from contact. If the measured current of any
+joint in a finger exceeded its configured threshold in the
+direction of motion, all four joints of that finger stopped
+at their measured positions. The other fingers continued
+until they encountered resistance or reached their target
+angles. A run ended when all four fingers had stopped;
+it was aborted if it exceeded 250 iterations.
 
-\subsection{Simulation of contact and data collection}
-\label{sec:simulation}
+After closure, the program read the final 16 joint angles.
+A temporary loss of position reporting was handled by
+retrying the final read for up to 10 seconds. During data
+collection, the angles and full grasp log were saved before
+the hand returned to its open posture. Motor currents were
+used to control the grasp; they were not passed to the
+classifier. No camera images, tactile arrays, simulated
+contacts, or object meshes were used to train the
+physical-only model.
 
-The simulation code imports each STEP object with CadQuery, tessellates
-it into a triangle mesh, and mounts that mesh as a fixed body in a
-MuJoCo scene containing the hand URDF. Explicit object--hand collision
-pairs are added. Contact geometries are assigned to a finger through
-their parent bodies; contact with the palm or an unexpected stationary
-finger is treated as an invalid scene. Any object already touching the
-hand in the initial posture is also rejected.
+\subsection{Physical dataset and proposed 20-object experiment}
+\label{sec:dataset}
 
-At each grasp iteration, the simulator advances one active finger at a
-time and tests the proposed posture for mesh contact. If contact occurs,
-eight bisection steps between the last clear posture and the blocked
-posture locate a nearby collision-free final angle. The entire finger
-then stops. This is a kinematic contact experiment: joint positions are
-set directly, with no learned grasp policy, motor dynamics, force
-prediction, or simulated motor current. The recorded feature for scene
-$i$ is the final vector
-\begin{equation}
-\mathbf q_i=(q_{i,0},\ldots,q_{i,15})\in\mathbb R^{16},
-\label{eq:angles}
-\end{equation}
-along with its class, scale, physical size, and each finger's stop
-reason. A complete step-by-step trace is saved for replay in the
-MuJoCo viewer.
+Each training record consists of a household-object label
+and one final angle vector,
+\[
+\mathbf{q}_i=(q_{i0},q_{i1},\ldots,q_{i15})\in\mathbb{R}^{16}.
+\]
+The data-collection program stores every completed trial
+with its final angles and time-series log. It also saves a
+collection plan before recording begins, so interrupted
+sessions can resume without discarding earlier trials.
+Additional trials and new classes can be added later.
 
-The scale sweep is $s\in\{0.50,0.55,\ldots,1.50\}$, so the three classes
-produce $3\times21=63$ simulated scenes. Each class has exactly one
-deterministic simulated grasp per size. No object-pose randomization or
-repeated physical trials are part of this dataset.
+The intended full study contains 20 distinct household
+objects, with a target of ten physical grasps per object,
+or 200 labeled trials. The selected objects should be
+graspable within the hand's configured motion limits and
+should vary in geometry and size. Their names, dimensions,
+and placement orientation will be recorded with the
+dataset. Repeated grasps should include natural variation
+in reseating the same object. A separate later session
+should be reserved to test changes in placement and hand
+state. These 20-object trials have not yet been collected
+in the repository examined for this manuscript.
 
-\begin{figure}[ht]
-\centering
-\fbox{\begin{minipage}{0.90\linewidth}
-\centering
-STEP mesh + fixed pose + scale $\longrightarrow$ MuJoCo closing grasp\\[3pt]
-$\longrightarrow$ 16 final joint angles $\longrightarrow$
-class-and-scale network + rejection rule\\[7pt]
-Physical object $\longrightarrow$ current-limited closing grasp
-$\longrightarrow$ measured final angles\\[3pt]
-$\longrightarrow$ saved network $\longrightarrow$
-class, size, or unknown
-\end{minipage}}
-\caption{Implemented data and inference paths. The lower path is
-implemented for the real hand but has not supplied the quantitative
-results in this paper.}
-\label{fig:pipeline}
-\end{figure}
+Two smaller physical datasets are currently available.
+The first has three trials each of a 7.5~cm side-length
+cube, a 7.5~cm diameter sphere, and a 5.0~cm diameter
+cylinder. The second has three trials each of a ball,
+bottle, bowl, and computer mouse. The first dataset is
+used below to examine the neural model; the second
+provides a household-object nearest-trial baseline.
+These datasets do not contain a trained 20-class model.
 
-\subsection{Feature preparation and model}
+\subsection{Neural network and training}
 \label{sec:model}
 
-Only the final angles in Eq.~\eqref{eq:angles} are model inputs.
-Positions, velocities, motor currents, fingertip trajectories, and
-per-step contact histories are not training features. Each angle is
-normalized by the configured grasp span:
-\begin{equation}
-x_j=\begin{cases}
-\dfrac{q_j-a_j}{b_j-a_j}, & b_j\ne a_j,\\
-0, & b_j=a_j,
-\end{cases}
-\label{eq:normalization}
-\end{equation}
-where $a_j$ and $b_j$ are the start and target angles. A fixed joint has
-no simulated variation from which to identify an object. The
-input $\mathbf x\in\mathbb R^{16}$ passes through a fully connected
-32-unit hyperbolic-tangent layer. The four output values consist of
-three class logits and one continuous predicted scale factor
-$\hat s$. A softmax converts the logits to class probabilities. With
-three classes, the network has
-$16(32)+32+32(4)+4=676$ trainable parameters.
+The neural network receives only the final 16 joint
+angles. Before training, each angle is normalized by
+the configured start and target angles:
+\[
+x_j=\frac{q_j-a_j}{b_j-a_j},
+\]
+where \(a_j\) and \(b_j\) are the start and target
+angles for joint \(j\). A joint with equal start and
+target values is assigned a normalized value of zero.
 
-Training minimizes mean class cross-entropy plus mean squared scale
-error:
-\begin{equation}
-\mathcal L=
--\frac{1}{N}\sum_{i=1}^{N}\log p_{i,c_i}
-+\lambda\frac{1}{N}\sum_{i=1}^{N}(\hat s_i-s_i)^2,
-\qquad \lambda=1.
-\label{eq:loss}
-\end{equation}
-The NumPy implementation uses full-batch Adam for 1000 epochs, a
-learning rate of 0.02, and random seed 7. For each simulated grasp,
-50 independent copies receive zero-mean Gaussian measurement noise
-with a 0.5-degree standard deviation per angle; the unmodified
-example is retained. The augmented copies approximate position
-measurement variation but do not model systematic calibration error.
+The classifier has 16 input units, one fully connected
+24-unit hidden layer with a hyperbolic tangent activation,
+and one output for each enrolled object. A softmax
+operation converts the outputs to class probabilities.
+For \(C\) classes, the model has \(408+25C\) trainable
+parameters. Thus, the planned 20-class model would have
+908 parameters. It does not predict object size.
 
-\subsection{Validation protocol and unknown decision}
+We used full-batch Adam optimization with a learning
+rate of 0.01, weight decay of 0.001, and a limit of 500
+epochs. Each real grasp was retained and supplemented
+with 20 noisy copies during training. Independent
+zero-mean Gaussian noise with a standard deviation of
+\(0.5^\circ\) was added to each joint. A second
+\(0.5^\circ\) Gaussian perturbation was shared by the
+four joints of each finger. These artificial copies
+approximate small measurement and grasp variation; they
+are not counted as additional physical trials. Samples
+were weighted inversely to the number of real trials in
+their class to reduce the effect of unequal class sizes.
+
+\subsection{Validation and recognition decisions}
 \label{sec:validation}
 
-The data split is made by \emph{size before augmentation}. Every fifth
-scale---50\%, 75\%, 100\%, 125\%, and 150\%---is held out for each
-class. Thus 48 distinct simulated scenes produce 2448 training
-examples (48 original vectors plus 50 noisy copies each), while 15
-unmodified scenes are used for validation. A separate final model is
-then trained on all 63 scenes and their noisy copies (3213 examples)
-for later physical-hand use. The validation figures in this paper
-refer to the model trained on the 48-scene subset.
+The implemented evaluation uses up to three folds, with
+real trials from every class assigned to different folds
+before noise is added. Noise augmentation is performed
+only on each training fold. The validation fold therefore
+contains measurements from the physical hand, not
+perturbed copies of training samples. The best epoch in
+each fold is selected by validation cross-entropy, with
+training stopped after 80 epochs without improvement.
+The final model is then trained on all real trials for
+the median number of selected epochs.
 
-Raw classification accuracy is the fraction of the 15 validation
-scenes whose highest-probability class equals the ground-truth class.
-For scale, the reported mean absolute error is
-\begin{equation}
-\mathrm{MAE}_{\mathrm{size}} =
-\frac{1}{15}\sum_{i=1}^{15}
-|\hat s_i-s_i|\,d_{c_i},
-\label{eq:mae}
-\end{equation}
-where $d_{c_i}$ is the \emph{ground-truth class's} reference dimension.
-This measures scale regression in physical units even for a
-misclassified scene; it is not the error of the final class-conditioned
-size output when the predicted class is wrong.
+The class probabilities are adjusted with a temperature
+selected from the held-out folds. We also compute the
+distance from a new normalized angle vector to the
+nearest saved physical training grasp. A prediction is
+reported as \emph{unknown} when this distance exceeds
+1.5 times the 95th percentile of the validation
+distances. Otherwise, it is reported as \emph{uncertain}
+when the largest class probability is below 0.75 or
+the difference between the two largest probabilities
+is below 0.20. A known class is returned only when
+these checks pass. These thresholds were chosen using
+known-class trials; their ability to reject genuinely
+unseen objects has not yet been evaluated.
 
-The deployed output may instead be \texttt{unknown}. Four checks are
-applied in order. First, the Euclidean distance from the normalized
-input to its nearest simulated reference vector must not exceed a
-distance threshold. That threshold is 1.5 times the largest nearest
-training-scene distance of the 15 held-out scales (0.0754 for the
-present dataset). Second, the largest class probability must be at
-least 0.75. Third, the network class must agree with the class of
-the nearest simulated reference vector. Fourth, the difference
-between the two smallest \emph{classwise} nearest-reference distances,
-measured in raw angle degrees, must be at least $2^\circ$. A failure
-at any step returns \texttt{unknown} without a size. Otherwise, the
-predicted scale is clipped to $[0.50,1.50]$ and multiplied by the
-reference dimension for the predicted class.
+If a neural prediction remains uncertain, the program
+can request another grasp of the same object, up to
+three grasps. The class probabilities are averaged
+across grasps, while the nearest-trial distances are
+combined using their median. The resulting decision
+is saved along with each individual grasp. A separate
+nearest-trial method assigns the class of the saved
+physical grasp with the smallest Euclidean distance
+in degrees. That method supplies a comparison baseline;
+it does not produce probabilities or an unknown-object
+decision.
 
-The distance threshold was calculated from the same 15 scales on
-which accepted/rejected outcomes are reported. Those outcomes are
-therefore descriptive, not an independent evaluation of the
-unknown-object rule. No untrained CAD object class was tested.
+For the completed 20-object study, the primary outcome
+will be raw class accuracy on held-out physical trials,
+reported with a confusion matrix and per-class results.
+We will also report the fraction of predictions accepted
+by the decision rule, the accuracy among accepted
+predictions, and the effect of repeated grasps. Trials
+from later sessions and separate objects excluded from
+training are needed to evaluate robustness and
+unknown-object rejection independently. The current
+folded evaluation does not substitute for those tests.
 
-\subsection{Physical-hand implementation and reproducibility}
-\label{sec:physical}
+\subsection{Software implementation}
+\label{sec:software}
 
-The hardware program sends the grasp through \texttt{ExArm}. It reads
-all 16 motor positions, velocities, and signed currents through the
-Dynamixel driver. For each
-moving joint, a current exceeding its calibrated threshold in the
-commanded direction stops that joint's entire finger at its measured
-pose. The per-joint threshold vectors are
-$[22,80,25,20]$ for each of the index, middle, and ring fingers and
-$[25,70,25,20]$ for the thumb, in the values returned by the motor-state
-reader. The hand settles for 2\,s before the grasp, waits 0.2\,s between
-command steps, and aborts after repeated state-read failures or more
-than 250 steps. These thresholds are configurable and may require
-recalibration; motor current is a contact proxy, not a direct
-measurement of contact force.
+The grasp and physical-only training programs are part
+of Ex-ARM \citep{ExARM}. The same interface can collect
+or extend a dataset, train either model, and run the
+physical hand for recognition. A presentation window
+shows the final decision and the neural probabilities
+for every enrolled class. Its side panel visualizes
+the measured hand pose using a MuJoCo rendering of the
+hand \citep{TodorovErezTassa2012}. This rendering is
+used for display only; the physical-only classifier
+is trained from measured hand angles.
 
-After the final state read, the physical program supplies the measured
-16-angle vector to the saved model, prints class and size or an
-unknown reason, and saves a timestamped JSON result. It also saves
-joint-state traces and the final angle vector as CSV files. This code
-path is implemented, but the repository contains no labeled
-real-object results, so no sim-to-real recognition accuracy is claimed.
-
-The experiment settings are in \path{utils/Constants.py}. The main
-entry points generate and train simulated grasps
-(\path{Train_Proprioception.py}), replay saved grasp trajectories
-(\path{View_Proprioception.py}), and run recognition on the physical
-hand (\path{Run_Proprioception.py}). The
-\path{Data/Proprioception} directory holds final grasp angles, step
-traces, augmented samples, validation rows, the training report, and
-the saved model weights. The implementation and data form part of the
-Ex-ARM project \citep{ExARM}.
-
-\section{Results}
+\section{Results and Discussion}
 \label{sec:results}
 
-The generated dataset contains 63 completed simulated grasps and
-5004 recorded time-step rows, including the initial posture of each
-scene. Across the 252 finger endings (four per scene), 241 were
-attributed to object contact and 11 to reaching the configured
-angle limits. These counts confirm that the simulated closing motion
-generated object contact in many finger trajectories; they are not a
-measure of recognition performance.
+\subsection{Available physical pilot results}
+\label{sec:pilot_results}
 
-On the 15 scales excluded from the validation model's training set,
-13 raw network class predictions were correct (86.7\%). Table
-\ref{tab:validation} shows results by class. Both raw errors were
-sphere-or-cylinder scenes predicted as cube. The scale-factor
-regression achieved the ground-truth-dimension-weighted MAE of
-1.02\,mm defined in Eq.~\eqref{eq:mae}.
+Table~\ref{tab:pilot} summarises the physical
+measurements available at the time of writing. In the
+geometric-object pilot, the neural classifier correctly
+classified all nine held-out real trials in three-fold
+validation. Each class contributed three trials, and
+checks. This acceptance count is descriptive because
+the distance and probability settings were selected
+from the same folded validation data. The final neural
+model was subsequently trained on all nine physical
+trials.
+
+The separate household-object dataset contains a ball,
+bottle, bowl, and computer mouse, with three trials per
+object. The nearest-trial method classified 11 of the
+12 trials correctly when each trial was removed in turn
+from the training set. One ball trial was assigned to
+the bottle class. This household result belongs to the
+nearest-trial baseline; no neural model has yet been
+trained or evaluated on this dataset.
 
 \begin{table}[ht]
 \centering
-\caption{Held-out simulated-scale validation. Accepted means that
-none of the four unknown-output checks rejected the grasp. The
-acceptance rule uses a distance threshold derived from these
-held-out scales.}
-\label{tab:validation}
-\begin{tabular}{lccc}
+\caption{Results from the available physical pilot datasets.
+The neural and nearest-trial rows use different objects
+and evaluation methods.}
+\label{tab:pilot}
+\begin{tabular}{lcccc}
 \toprule
-True class & Scenes & Raw class correct & Accepted (correct) \\
+Physical dataset & Classes & Trials & Method &
+Correct \\
 \midrule
-Cube & 5 & 5 & 1 (1) \\
-Sphere & 5 & 4 & 1 (1) \\
-Cylinder & 5 & 4 & 1 (1) \\
-\midrule
-Total & 15 & 13 & 3 (3) \\
+Geometric objects & 3 & 9 & Three-fold neural & 9/9 \\
+Household objects & 4 & 12 & Leave-one-trial-out
+nearest & 11/12 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The unknown-output rule rejected 12 of the 15 held-out grasps: four
-because the two nearest classes had similar angle vectors, seven
-because the network's maximum class probability was below 0.75, and
-one because the network and nearest reference class disagreed.
-All three accepted grasps had the correct class, but the acceptance
-rate was only one fifth. Since the threshold was set using these
-same held-out sizes and no novel object class was tested, this
-result cannot establish real-world unknown-object detection.
+The geometric pilot demonstrates that its three
+particular objects produced distinguishable joint-angle
+patterns across the recorded grasps. The household
+baseline suggests that a similar physical-data
+collection process can be used for everyday objects.
+Neither result measures the accuracy of a neural
+classifier trained on 20 household objects. All
+training and validation trials in each pilot involve
+the same physical exemplars, with only three recorded
+grasps per class.
 
-\section{Discussion}
+\subsection{Implications for the 20-object study}
 \label{sec:discussion}
 
-The held-out-scale results support the limited proposition that a
-single controlled closing motion can carry information about both
-class and scale when the object remains at a known pose in the
-simulator. At the same time, some sphere and cylinder configurations
-produced final angles that the network assigned to the cube class,
-and the conservative rejection checks discarded most validation
-grasps. A larger set of independent test sizes, repeated grasps,
-and baseline classifiers would be required to estimate robustness
-and compare alternative representations.
+The larger study asks a more demanding question than
+either pilot. As additional objects are enrolled,
+different items may lead to similar final joint
+configurations. A water bottle and another cylindrical
+container, for example, might stop the fingers at
+similar angles when placed at the same point. The
+classifier must then rely on the small differences
+that remain in the 16-angle vector. The planned
+confusion matrix and per-class results will identify
+which objects are difficult to distinguish.
 
-The central transfer uncertainty lies in how a simulated collision
-corresponds to a motor-current event on the physical hand. Real
-motors, transmission compliance, current noise, friction, and object
-mount errors can shift the final angle relative to the idealized
-collision-free boundary used for training. Gaussian perturbation
-of 0.5 degrees does not reproduce these effects. The experiment also
-holds orientation and position fixed, so its numerical results do
-not generalize to freely held or moving objects. Because each class
-has one mesh and only uniform scaling, the model has not learned
-within-class shape variation.
+The current neural training procedure perturbs
+recorded angles after the training and validation
+trials are separated. This protects the held-out
+measurements from direct duplication, but artificial
+noise cannot represent every source of physical
+variation. Changes in object placement, motor
+calibration, friction, compliance, and contact force
+may alter the final angles in ways that are not
+equivalent to small Gaussian perturbations. Collecting
+additional real grasps across sessions is therefore
+important for the intended 20-object experiment.
 
-The present manuscript concerns the implemented final-angle
-method. It does not use fingertip reconstruction, multi-grasp
-surface mapping, or an adaptive exploration policy. Such methods
-could add information where a single grasp is ambiguous, but their
-benefit would need to be tested against this baseline. Similarly,
-open-set performance requires independent objects that were absent
-from both training and threshold selection.
+The confidence and distance rules can decline to
+assign a known label, and repeated grasps can
+combine several observations of the same item.
+However, the reported pilot tests contain only
+trained classes. The thresholds were selected from
+known-class validation data. A high class
+probability therefore does not establish that an
+unseen object will be rejected correctly. Objects
+excluded from all training, together with independent
+placement and session tests, are required to measure
+the behavior of the \emph{unknown} and \emph{uncertain}
+outputs.
 
-A physical evaluation should next mount measured examples of all
-three classes at the simulated pose and collect repeated labeled
-grasps over several sizes. The comparison should report class
-accuracy, size error, rejection rate, and differences between each
-real final-angle vector and its matching simulated vector. Separate
-tests with new shapes and perturbed placements would then test
-unknown detection and domain transfer without tuning thresholds on
-the test cases.
+The work differs from the earlier simulation-based
+shape-and-size approach in the Ex-ARM project. Here,
+the neural network is trained only on measurements
+from the physical hand and predicts the identity of
+an enrolled object. It makes no continuous size
+estimate. This choice avoids assuming that simulated
+contact angles match the angles reached when real
+motors exert force before their current thresholds
+are exceeded. The resulting model must instead obtain
+its variation from repeated physical grasps.
+
+Prior studies have demonstrated the value of
+proprioceptive information for object recognition
+and property estimation
+\citep{VasquezPerdereau2017,SintovMeir2023,Kutsuzawa2024}.
+The present implementation contributes a compact
+physical-hand classifier and a repeatable procedure
+for gathering, extending, and evaluating a labeled
+grasp dataset. Its present evidence is preliminary.
+The 20-object study is needed before claims about
+household-object recognition accuracy can be made.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-This study implements active object recognition with a LEAP Hand
-using only final joint angles. With a fixed object pose and 63 simulated
-grasps across cube, sphere, and cylinder models, a 676-parameter
-network classified 13 of 15 held-out sizes correctly and achieved
-1.02\,mm mean absolute scale-regression error in the reported size
-units. A rule-based unknown output accepted three held-out grasps,
-all correctly classified, at low coverage. These are simulation
-results. The corresponding physical current-limited grasp and
-inference code are available for experimental measurement, but the
-accuracy of physical recognition and the ability to reject
-genuinely novel objects remain open questions.
+This study describes a physical-only proprioceptive
+recognition system for the LEAP Hand. A standardized
+grasp stops each finger when motor current indicates
+contact, and a small neural network classifies an
+object from the final 16 joint angles. The proposed
+experiment will enroll 20 household objects and use
+repeated physical grasps to evaluate class accuracy,
+uncertain decisions, and the value of combining
+multiple grasps.
+
+The available three-object neural pilot classified
+nine of nine held-out physical trials correctly.
+A separate four-object household nearest-trial
+baseline classified 11 of 12 trials correctly.
+These results establish a starting point for the
+larger physical study, but do not establish the
+performance of a 20-class neural model. Completing
+the 20-object dataset and testing later sessions,
+placement variation, and objects withheld from
+training will be necessary to assess reliability
+and unknown-object rejection.
 
 \bibliographystyle{elsart-harv}
 \bibliography{manuscript}

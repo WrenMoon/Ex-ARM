@@ -2,7 +2,7 @@
 
 Ex-ARM is a Python project for a 16-joint LEAP Hand. It brings together Dynamixel motor control, a MuJoCo hand viewer, forward and inverse kinematics, webcam teleoperation, a pose-sequencing GUI, recorded motion replay, and proprioceptive object recognition. Each tool can be used independently to control, observe, teach, or study the hand.
 
-The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps, and nine physical grasps now support a separate class-only baseline. Recognition accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) describes the simulated study and has not yet been updated with these physical trials.
+The project is under active development. The simulation-trained class-and-size model has been evaluated on simulated grasps, and nine physical grasps now support separate nearest-trial and neural class-only experiments. Recognition accuracy of the simulation-trained model on the real hand remains unmeasured. The [research manuscript](Manuscript/Manuscript.tex) describes the simulated study and has not yet been updated with these physical trials.
 
 ## Contents
 
@@ -28,7 +28,7 @@ The project is under active development. The simulation-trained class-and-size m
 | Motion teaching | [`Vision/Vision_Kinesthetic_Teaching.py`](Vision/Vision_Kinesthetic_Teaching.py) | Record hand landmarks, process an angle trajectory, and replay it. |
 | Pose editing and playback | [`Ex-GUI.py`](Ex-GUI.py), [`Pose_Sequence_Runner.py`](Pose_Sequence_Runner.py) | Build, save, and play 16-joint pose sequences. |
 | Proprioception research | [`Grasp.py`](Grasp.py), [`Train_Proprioception.py`](Train_Proprioception.py), [`View_Proprioception.py`](View_Proprioception.py), [`Run_Proprioception.py`](Run_Proprioception.py) | Generate simulated grasps, train a class-and-size model, inspect trials, and run recognition on the physical hand. |
-| Physical-only experiment | [`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) | Collect three real grasps per class and identify classes using saved physical trials. |
+| Physical-only experiment | [`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py), [`utils/PhysicalOnlyNetwork.py`](utils/PhysicalOnlyNetwork.py) | Collect and extend physical datasets; compare nearest-trial and neural class recognition. |
 | Diagnostics and utilities | [`test1.py`](test1.py), [`utils/BoxPrinter.py`](utils/BoxPrinter.py), [`utils/URDF_Convertor.py`](utils/URDF_Convertor.py) | Display live motor state and assist with URDF mesh paths. |
 
 The [`Data/`](Data/) folder contains the hand model, three STEP objects, example pose series, the MediaPipe hand landmark model, saved GUI sessions, and generated recognition data. The [`Manuscript/`](Manuscript/) folder contains the LaTeX research manuscript and its PDF.
@@ -247,7 +247,7 @@ The checked-in report records **13/15 (86.7%) raw class predictions correct** an
 
 ### Physical recognition
 
-[`Grasp.py`](Grasp.py) slowly closes all four fingers with the configured target angles. When a joint's signed measured current exceeds its threshold, that **entire finger stops at its measured angles**. `python Grasp.py` performs and logs only this physical grasp. [`Run_Proprioception.py`](Run_Proprioception.py) loads the trained model first, runs the grasp on the real hand, prints class and size or `unknown`, and saves a JSON result:
+[`Grasp.py`](Grasp.py) slowly closes all four fingers with the configured target angles. When a joint's signed measured current exceeds its threshold, that **entire finger stops at its measured angles**. If the final state read fails, the grasp waits and retries for up to `Proprioception.final_read_timeout_s` seconds. `python Grasp.py` performs and logs only this physical grasp. [`Run_Proprioception.py`](Run_Proprioception.py) loads the trained model first, runs the grasp on the real hand, prints class and size or `unknown`, and saves a JSON result:
 
 ```bash
 python Run_Proprioception.py
@@ -257,17 +257,25 @@ Set `Connection.Port` and verify the hand's motor IDs, angle offsets, calibrated
 
 ### Physical-only class experiment
 
-[`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) is a separate class-only baseline. It uses the same physical [`Grasp.py`](Grasp.py), but does not load simulations, the neural network, or `model.npz`. Training stores three final-angle trials per class. Recognition chooses the class of the nearest stored trial using Euclidean distance across the 16 joint angles. It does not estimate size, calculate a calibrated confidence, or reject an unknown class.
+[`Physical_Only_Proprioception.py`](Physical_Only_Proprioception.py) uses the same physical [`Grasp.py`](Grasp.py) and does not load MuJoCo data or the simulation-trained `model.npz`. It provides two separate class-only methods. The original nearest-trial method chooses the class of the closest saved 16-angle grasp; it does not estimate size or reject an unknown class. The added [`PhysicalOnlyNetwork`](utils/PhysicalOnlyNetwork.py) is a small 16-input, 24-hidden-unit neural classifier with one output per class.
 
 ```bash
 python Physical_Only_Proprioception.py
 ```
 
-The terminal menu can collect a new named dataset, retrain a saved dataset, or identify an object with the real hand. For collection, enter the number and names of classes; the program prompts for three grasps per class. Use a new dataset name for each experiment. For recognition, press Enter at the dataset prompt to use the included `initial_9` dataset. The class names come from your terminal input and do not need entries in `Proprioception.objects` or STEP files. Collection and recognition require the real hand and a configured `Connection.Port`; training from saved trials does not connect to hardware. Changing the grip, motor IDs, or angle offsets requires new physical training trials.
+The terminal menu offers **1** to collect or resume, **2–3** to train and run the nearest-trial method, **5** to add trials or classes, **6–7** to train and run the neural method, and **8** to launch the presentation UI. For a new collection, enter the number of classes, the number of grasps per class (default 3), and each class name. The program saves `collection.json` before the first grasp and saves each completed trial separately. After the final angles and grasp files are saved, the hand automatically moves to the configured starting angles and waits for `Proprioception.settle_time_s` before the next placement prompt. If collection stops, choose **1** and enter the same dataset name; complete trials are skipped. For a partial collection made with the older program, re-enter its original class names and trial count once. Incomplete files are preserved separately for inspection.
 
-The included [`initial_9`](Data/Proprioception/Physical_Only/initial_9/) dataset contains three grasps each of a **7.5 cm side cube**, **7.5 cm diameter sphere**, and **5.0 cm diameter cylinder**, with their full `log.csv` traces. The saved `model.json` contains the nine reference angles. Leave-one-trial-out testing identifies **9/9** supplied trials correctly. This tests repeat grasps of those exact objects and sizes; it does not establish shape recognition across new sizes, placements, or objects. A real recognition run saves its own grasp files and result in a timestamped `runs/` folder under the selected dataset.
+The presentation window can also be started directly with `python Physical_Only_UI.py`. It uses the same physical datasets and models as the terminal menu. Its **Collect** tab creates plans, resumes one pending grasp at a time, and adds trials or classes; **Train** builds either class-only model; **Recognize** runs nearest-trial or neural identification. For neural identification, use **Run neural grasp** again to combine another reading, or **Start a new neural reading** for a different object. The right side shows the MuJoCo hand at the measured physical joint angles, with drag-to-rotate and scroll-to-zoom controls. It is a visual mirror of the real hand, not a second recognition simulation. Neural results show a probability for every class and the final class, `uncertain`, or `unknown` decision. Nearest-trial results show per-class angle distances because that method has no probability estimate. Hardware and training jobs run in the background so the window stays responsive. The UI requires Tkinter and MuJoCo in the active Python environment.
 
-These trials also show a sim-to-real gap. At the measured sizes, mean real minus simulated angles differ by object: joint 8 is about **+7.4°** for the cube and **+7.2°** for the sphere, but **−0.5°** for the cylinder. Joint 5 is about **−2°** for all three. Using the average offset of two classes to correct the held-out class identifies only **4/9** trials by nearest simulated grasp, the same count as without correction. Using trial 1 of each class as its own offset identifies that class in all **6/6** remaining repeat trials, but those repeats have the same size. Transfer to other sizes remains untested.
+Choose **5** on a complete dataset to add the same number of grasps to every current class, add extra grasps to selected classes, and/or add new classes with their own trial counts. The expanded plan is saved before collection, so an interrupted extension also resumes with option **1**. The nearest-trial model is updated when collection finishes. Choose **6** to train or retrain the neural model after changing any physical trials. Use a new dataset when changing the grip, motor IDs, or angle offsets; existing measurements should not be mixed across those settings. The class names do not need entries in `Proprioception.objects` or STEP files. Collection and recognition require a real hand and configured `Connection.Port`; training does not connect to hardware.
+
+Neural training uses every completed physical trial for the final model. During evaluation, it first holds out real trials in up to three folds, then adds small joint and finger-level angle noise **only to the training folds**. Class weighting reduces the effect of unequal trial counts. The final model is retrained on all physical trials, and a saved report gives held-out accuracy and a confusion table. It requires at least three real trials per class. The noise, training settings, score thresholds, and maximum repeat grasps are in `PhysicalOnly` in [`utils/Constants.py`](utils/Constants.py). Noise copies are variations of existing trials, not independent physical evidence.
+
+Choose **7** to run the neural model. It opens the hand between grasps and requests another placement when the combined result is uncertain or far from saved trials, up to `PhysicalOnly.network_max_grasps` (default 3). Each grasp and the combined prediction are saved under `neural_runs/`. The output may be a class, `uncertain`, or `unknown`. Its class score is calibrated on held-out **known** trials, but unknown-object rejection has not been validated with unseen objects. A high class score alone is not treated as proof that an object is known.
+
+The included [`initial_9`](Data/Proprioception/Physical_Only/initial_9/) dataset contains three grasps each of a **7.5 cm side cube**, **7.5 cm diameter sphere**, and **5.0 cm diameter cylinder**, with their full `log.csv` traces. Its nearest-trial `model.json` identifies **9/9** supplied trials in leave-one-trial-out testing. Its neural `neural_report.json` also records **9/9** in three-fold held-out-trial testing. Both results test repeat grasps of those exact objects and sizes; neither establishes recognition across new sizes, placements, sessions, or unknown objects. The nearest-trial method saves runs under `runs/`; the neural method uses `neural_runs/`.
+
+These trials also show a sim-to-real gap. At the measured sizes, mean real minus simulated angles differ by object: joint 8 is about **+7.4°** for the cube and **+7.2°** for the sphere, but **−0.5°** for the cylinder. Joint 5 is about **−2°** for all three. In a nearest-simulation diagnostic, the raw simulated grasps identify **4/9** real trials. A correction averaged from the other two classes, then clipped to the grasp angle limits, identifies **5/9**. Using trial 1 of each class as its own offset identifies that class in all **6/6** remaining repeat trials, but those repeats have the same size. Transfer to other sizes remains untested.
 
 ### Outputs and adding an object
 
@@ -282,7 +290,7 @@ All experiment outputs are under [`Data/Proprioception/`](Data/Proprioception/):
 | `model.npz` | Weights, object metadata, reference grasps, and stored settings. |
 | `log.csv`, `grasp_results.csv` | Last physical grasp's state trace and final measured angles. |
 | `recognition_result.json` | Last physical run's timestamp, final angles, and prediction. |
-| `Physical_Only/initial_9/` | Nine labeled real grasps and the independent physical-only class model. |
+| `Physical_Only/initial_9/` | Nine labeled real grasps, a nearest-trial model, a neural model, and its evaluation report. |
 
 Training overwrites its generated CSVs and model; a physical run overwrites its last-run logs. To add a class, put a STEP file measured in millimetres in [`Data/Objects/`](Data/Objects/), add its metadata and reference size to `Proprioception.objects`, and retrain. Check that the object does not touch the hand at the initial pose and that the grasp fits the URDF limits. Retrain after changing STEP or URDF geometry: model loading checks many constants but does not hash those files.
 
@@ -290,7 +298,7 @@ Training overwrites its generated CSVs and model; a physical run overwrites its 
 
 | Path | Role |
 | --- | --- |
-| [`utils/Constants.py`](utils/Constants.py) | `Connection` controls the general hand backend. `Proprioception` controls the recognition grasp, objects, scale sweep, noise, network, rejection rules, and output paths. |
+| [`utils/Constants.py`](utils/Constants.py) | `Connection` controls the general hand backend. `Proprioception` controls the recognition grasp, final-read retry, objects, scale sweep, noise, network, rejection rules, and output paths. `PhysicalOnly` controls physical dataset defaults and neural training and recognition settings. |
 | [`Data/Leap_Model/`](Data/Leap_Model/) | Hand URDFs, STL meshes, and part files. |
 | [`Data/Example_pose_series/`](Data/Example_pose_series/) | JSON sequences for the pose runner. |
 | [`Data/Ex-GUI/`](Data/Ex-GUI/) | Saved and autosaved editor sessions. |
@@ -317,4 +325,4 @@ Training overwrites its generated CSVs and model; a physical run overwrites its 
 - The direct-angle vision script's preview/Q-key exit is currently commented out. The motion-teaching script's combined menu option is currently broken; its separate stages work as the intended route.
 - `test1.py` is a manual state display, not an automated test suite. The GUI's mock fallback is useful for editing poses but cannot verify physical motion.
 
-The included manuscript documents the simulated recognition study. The new physical-only baseline and nine real trials have not yet been incorporated into that manuscript.
+The included manuscript centers the planned 20-object physical-only neural study and reports the available three-object neural and four-object household nearest-trial pilots. It does not claim a completed 20-class result.

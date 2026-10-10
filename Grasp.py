@@ -1,12 +1,13 @@
 import csv
 import json
+import math
 from pathlib import Path
 import time
 
 from utils.Constants import Connection, Proprioception
 
 
-def grasp(leap_hand):
+def grasp(leap_hand, on_angles=None):
     grip = Proprioception.grip
     current_positions = grip["start_angles"].copy()
     stopped_fingers = [False] * 4
@@ -31,6 +32,13 @@ def grasp(leap_hand):
         positions, velocities, currents = real_state
         if len(positions) != 16 or len(velocities) != 16 or len(currents) != 16:
             raise ValueError("Expected state for all 16 joints")
+        if on_angles is not None:
+            try:
+                measured = [float(value) for value in positions]
+                if all(math.isfinite(value) for value in measured):
+                    on_angles(measured)
+            except (TypeError, ValueError):
+                pass
 
         for finger in range(4):
             if stopped_fingers[finger]:
@@ -78,11 +86,28 @@ def grasp(leap_hand):
         raise RuntimeError("Grasp exceeded the maximum number of steps")
 
     time.sleep(Proprioception.step_time_s)
-    final_state = leap_hand.get_state()
-    final_state = final_state.get("real") if isinstance(final_state, dict) else final_state
-    if not isinstance(final_state, (tuple, list)) or len(final_state) != 3:
-        raise RuntimeError("Unable to read the final hand angles")
+    deadline = time.monotonic() + Proprioception.final_read_timeout_s
+    waiting_for_state = False
+    while True:
+        final_state = leap_hand.get_state()
+        final_state = final_state.get("real") if isinstance(final_state, dict) else final_state
+        if isinstance(final_state, (tuple, list)) and len(final_state) == 3:
+            try:
+                if all(len(values) == 16 for values in final_state):
+                    if all(math.isfinite(float(value))
+                           for values in final_state for value in values):
+                        break
+            except (TypeError, ValueError):
+                pass
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Unable to read the final hand angles after retries")
+        if not waiting_for_state:
+            print("Waiting for the final hand angles...")
+            waiting_for_state = True
+        time.sleep(Proprioception.final_read_retry_s)
     final_positions = [float(value) for value in final_state[0]]
+    if on_angles is not None:
+        on_angles(final_positions)
     log.append([time.time(), final_positions,
                 [float(value) for value in final_state[1]],
                 [float(value) for value in final_state[2]]])

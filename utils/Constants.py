@@ -36,6 +36,8 @@ class Proprioception:
     step_time_s = 0.2
     max_grasp_steps = 250
     max_read_failures = 10
+    final_read_timeout_s = 10
+    final_read_retry_s = 0.5
 
     object_folder = "Data/Objects"
     objects = [
@@ -83,4 +85,28 @@ class Proprioception:
 class PhysicalOnly:
     data_folder = "Data/Proprioception/Physical_Only"
     default_dataset_name = "initial_9"
-    trials_per_class = 3
+    default_trials_per_class = 3
+    ui_width = 1280
+    ui_height = 820
+    ui_preview_width = 640
+    ui_preview_height = 420
+    ui_poll_ms = 80
+
+    network_model_file = "neural_model.npz"
+    network_report_file = "neural_report.json"
+    network_hidden_size = 24
+    network_epochs = 500
+    network_patience = 80
+    network_learning_rate = 0.01
+    network_weight_decay = 0.001
+    network_noise_deg = 0.5
+    network_finger_noise_deg = 0.5
+    network_noisy_copies = 20
+    network_validation_folds = 3
+    network_random_seed = 7
+    network_temperature_min = 1.0
+    network_temperature_max = 5.0
+    network_min_probability = 0.75
+    network_min_margin = 0.20
+    network_distance_multiplier = 1.5
+    network_max_grasps = 3
