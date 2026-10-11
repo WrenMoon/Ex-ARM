@@ -8,29 +8,31 @@
 
 \begin{frontmatter}
 
-\title{Design of a Physical-Only Proprioceptive Recognition System
-for Twenty Household Objects with a LEAP Hand}
+\title{Physical-Only Proprioceptive Recognition of Fifteen Classes
+with a LEAP Hand}
 
 \author{G.~Sai~Pranav}
 \author{Harish J.~Palanthandalam-Madapusi}
 
 \begin{abstract}
 Robotic hands commonly use vision or dedicated tactile sensors to
-recognize objects. This study examines whether a physical LEAP Hand
-can identify household items using only the joint angles reached
-after controlled grasps. Motor-current thresholds stop an entire
-finger when resistance is detected. Final angles from an ordered
-sequence of grips form the input to a compact neural classifier;
-all training measurements come from the physical hand. The system
-is designed for 20 household-object classes, with three sequential
-grips providing 48 final joint-angle measurements per trial. A
-24-unit hidden layer maps these measurements to class probabilities.
-Physical trials are augmented only after real measurements have
-been separated into training and validation folds. A distance and
-confidence rule permits uncertain or unknown outputs, and repeated
-trials can be combined when one reading is inconclusive. Evaluation
-requires held-out trials across objects and sessions, as well as
-objects excluded from training to test unknown-object rejection.
+recognize objects. Using 15 household objects, this study tests whether a physical LEAP Hand
+can distinguish between objects using only the joint angles reached
+after controlled grasps. 
+Motor-current thresholds stop an entire
+finger when resistance is detected. 
+Three sequential grips on the object provide
+48 final angles per trial to a 24-unit hidden-layer classifier.
+The dataset contains five physical trials for each of 15 labels,
+comprising 14 objects and an empty-hand condition. In three-fold
+within-dataset validation, the neural network classified 70 of
+75 held-out trials correctly. Its decision rule accepted 67
+trials as known classes, of which 65 were correct. A nearest-trial
+baseline obtained 69 of 75 correct in leave-one-trial-out
+evaluation. The class set was selected after preliminary
+analysis, so these results are internal, post-selection estimates.
+They do not measure generalization to a new session, object
+instance, or unseen class.
 \end{abstract}
 
 
@@ -66,19 +68,20 @@ motivate a physical-hand experiment using a simple observation:
 the final joint angles of a repeatable grip sequence.
 
 The main research question is whether final angles from the physical
-LEAP Hand can distinguish 20 enrolled household objects. A second
-question is whether combining repeated grip sequences improves
-decisions that are uncertain after one sequence.
-The model predicts object identity, rather than object size. Unless
-multiple examples of a household category are collected, each label
-refers to one physical item; recognition of another item of the same
-kind is a separate generalisation question.
+LEAP Hand can distinguish different objects, including an
+empty-hand condition. A second question is whether combining
+repeated grip sequences might improve decisions that are uncertain
+after one sequence; the current dataset evaluates individual
+sequences only. The model predicts a class label, rather than object
+size. Each object label represents the recorded physical exemplar;
+recognition of another instance of the same kind is a separate
+generalization question.
 
 The implementation provides repeatable grips, a resumable
 physical-data collection procedure, a neural classifier, a
 nearest-trial comparison method, and an interface for running the
-hand and viewing the results. The study is organized around
-recognition among 20 enrolled household objects.
+hand and viewing the results. Both models use only physical grasp
+measurements for training and recognition.
 
 \section{Experimental Setup and Methodology}
 \label{sec:methods}
@@ -86,14 +89,14 @@ recognition among 20 enrolled household objects.
 \subsection{Physical hand and controlled grips}
 \label{sec:grasp}
 
-The protocol uses a four-fingered LEAP Hand with 16 actuated joints
-\citep{ShawAgarwalPathak2023}. with 4 joints per finger, and four fingers. Namely, Index, Middle, Ring, and Thumb. 
-All angles are expressed in degrees. Each
-object is placed near a consistent point relative to the palm,
-with a prescribed variation of 2~cm in position and
-10$^\circ$ in orientation. Every object receives the same
-programmed grip sequence. Placement is a controlled experimental
-condition rather than a property inferred by the model.
+The protocol uses a four-fingered LEAP Hand with 16 actuated joints,
+four per finger \citep{ShawAgarwalPathak2023}. The fingers are the
+index, middle, ring, and thumb. All angles are expressed in degrees.
+Each object is placed near a consistent point relative to the palm,
+and every object receives the same programmed grip sequence.
+The saved trial files do not record measured placement offsets or
+object orientation. Placement is therefore a condition of the
+collection procedure rather than a property inferred by the model.
 
 For each configured grip, the hand moves to that grip's starting
 posture. Its 16 joints then advance toward specified targets using
@@ -109,7 +112,7 @@ next grip's starting posture before continuing the sequence.
 After each grip, the program reads its final 16 joint angles,
 retrying for up to 10 seconds if position reporting is temporarily
 unavailable. The final vectors are concatenated in grip order.
-The hand runs three distinct grips for different situations, yielding 48 input angles
+The hand runs three distinct grips, yielding 48 input angles
 per physical trial.
 
 During collection, the final angles and time-series log are saved
@@ -117,10 +120,10 @@ before the hand returns to its starting posture. Motor currents
 control the movement but are not classifier inputs. No camera
 images or tactile arrays are used as recognition features.
 
-\subsection{Twenty-object physical dataset}
+\subsection{Physical dataset}
 \label{sec:dataset}
 
-Each training record consists of a household-object label and
+Each training record consists of an enrolled class label and
 one concatenated final-angle vector,
 \[
 \mathbf{q}_i=
@@ -138,15 +141,16 @@ Additional trials and new classes can be added later. A mistaken
 trial may be retaken; the previous record is archived after a
 complete replacement has been checked.
 
-The study design specifies 20 distinct household
-objects, such as a water bottle, a bowl, a ball, a spectacles case, a ceramic mug, etc.
-the model is trained with ten independent physical trials
-per object, or 200 labeled trials. The selected objects are
-graspable within the hand's configured motion limits and
-vary in geometry and size. Their names, dimensions,
-and placement orientation are recorded with the
-dataset. Repeated trials include reseating the object
-between measurements, varying their position and orientation.
+The dataset has 15 labels: water bottle, Rubik's cube, ball,
+bowl, mug, basic cylinder, power bank, spectacles case, mouse,
+stapler, pencil box, Pyraminx, tape measure, spice bottle, and
+no object. Fourteen labels identify physical items and one
+identifies an empty-hand grasp. Five recorded trials per label
+give 75 physical trials. The trial files contain the class name,
+final angles, and time-series motor log; they do not contain
+measured object dimensions or placement coordinates. The
+analyzed class set was selected after preliminary analysis
+of recorded grasps rather than fixed before data collection.
 
 \subsection{Neural network and training}
 \label{sec:model}
@@ -163,11 +167,12 @@ target values is assigned a normalized value of zero.
 
 The classifier has \(16G\) input units, one fully connected
 24-unit hidden layer with a hyperbolic tangent activation,
-and one output for each enrolled object. A softmax
+and one output for each enrolled class. A softmax
 operation converts the outputs to class probabilities.
 For \(C\) classes, the model has \(384G+24+25C\) trainable
-parameters. With three grips and 20 classes, it has
-1,676 parameters. The model does not predict object size.
+parameters. With three grips and 15 classes, it has
+1,551 parameters. The model does not
+predict object size.
 
 Training uses full-batch Adam optimization with a learning
 rate of 0.01, weight decay of 0.001, and a limit of 500
@@ -229,82 +234,153 @@ The grip and physical-only training programs are part
 of Ex-ARM \citep{ExARM}. The terminal interface can
 collect, resume, extend, and retake physical trials,
 train either model, and run the hand for recognition.
-The presentation window shows the final decision,
-the neural probabilities for every enrolled class,
+The presentation window evaluates both trained models
+from the same recognition grasp. It shows both decisions,
+the neural probabilities or nearest-trial distances,
 and a visualization driven by the measured hand pose.
 The classifier itself uses only recorded physical angles.
+The repository retains the trial CSV files and model
+reports, including the neural confusion matrices and
+nearest-trial evaluation results.
 
-\section{Evaluation Protocol and Discussion}
+\section{Results and Discussion}
 \label{sec:results}
 
-\subsection{Twenty-object evaluation}
+\subsection{Within-dataset validation}
 \label{sec:evaluation}
 
-The principal outcome is raw classification accuracy across
-the 20 enrolled household objects. Each held-out physical
-trial contributes one true class and one predicted class.
-A 20-by-20 confusion matrix and per-class recall identify
-object pairs that produce similar final joint postures.
-Macro-averaged recall is included alongside overall
-accuracy so that classes with fewer trials do not disappear
-inside an aggregate score.
+Each trial was predicted once by a three-fold held-out
+neural model before the final model was trained on all
+recordings. Raw accuracy counts the largest softmax
+probability even when the decision rule would instead
+return \emph{uncertain} or \emph{unknown}. The accepted
+count includes only decisions assigned an enrolled class.
+The results are summarized in Table~\ref{tab:results}.
 
-The decision rule introduces two additional outcomes:
-\emph{uncertain} and \emph{unknown}. Evaluation therefore
-reports coverage, defined as the fraction of trials
-assigned a known class, and accuracy among accepted
-predictions. These measures are reported together;
-a high accepted accuracy by itself could result from
-rejecting many difficult trials. To assess unknown-object
-rejection, some physical objects must be excluded entirely
-from model training and treated as novel at test time.
+\begin{table}[t]
+\centering
+\caption{Internal validation of the 15-class physical dataset.
+Accepted correct is conditioned on a known-class decision.
+The nearest-trial method uses leave-one-trial-out evaluation
+rather than the neural network's three folds.}
+\label{tab:results}
+\small
+\begin{tabular}{lc}
+\hline
+Measure & 15 classes \\
+\hline
+Recorded physical trials & 75 \\
+Neural raw correct & 70/75 (93.3\%) \\
+Accepted known-class decisions & 67/75 (89.3\%) \\
+Accepted correct & 65/67 (97.0\%) \\
+Uncertain decisions & 8 \\
+Unknown decisions & 0 \\
+Nearest-trial correct & 69/75 (92.0\%) \\
+\hline
+\end{tabular}
+\end{table}
 
-A later collection session should be held out until the
-network, normalization, and decision thresholds are fixed.
-This test measures how object placement, motor calibration,
-and hand state affect recognition beyond the within-session
-validation folds. The same held-out objects can then be
-classified after one grip sequence and after repeated
-sequences. This paired comparison measures whether another
-physical observation improves the decision.
+The neural model correctly classified 70 of its 75
+held-out trials before rejection. It accepted 67 as
+known classes, of which 65 were correct; the other eight
+trials were uncertain. Table~\ref{tab:perclass} gives
+the raw result for every label. Ten labels
+had five correct predictions in five trials. The five
+remaining labels each had one error. Because all labels
+have five trials, macro-averaged recall equals raw
+accuracy at 93.3\%.
+
+\begin{table}[t]
+\centering
+\caption{Raw held-out neural predictions in the 15-class
+study. The table reports the highest-probability label
+before the uncertainty rule is applied.}
+\label{tab:perclass}
+\small
+\begin{tabular}{lcl}
+\hline
+True label & Correct & Incorrect prediction \\
+\hline
+Water bottle & 4/5 & Mug \\
+Rubik's cube & 5/5 & --- \\
+Ball & 5/5 & --- \\
+Bowl & 5/5 & --- \\
+Mug & 4/5 & Ball \\
+Basic cylinder & 4/5 & Rubik's cube \\
+Power bank & 4/5 & Spice bottle \\
+Spectacles case & 5/5 & --- \\
+Mouse & 4/5 & Bowl \\
+Stapler & 5/5 & --- \\
+Pencil box & 5/5 & --- \\
+Pyraminx & 5/5 & --- \\
+Tape measure & 5/5 & --- \\
+Spice bottle & 5/5 & --- \\
+No object & 5/5 & --- \\
+\hline
+\end{tabular}
+\end{table}
+
+The nearest-trial comparison classified 69 of 75 trials
+correctly. This baseline removes each tested trial
+from its reference set, while the neural result holds out
+approximately one third of the real trials per fold and
+uses those folds for epoch selection. The scores therefore
+describe different internal evaluations; their small
+numerical difference is not a controlled comparison
+on a separate test set.
 
 \subsection{Interpretation and limitations}
 \label{sec:discussion}
 
-The final joint configuration contains information about
-where the fingers were stopped, but it is not a unique
-description of an object's shape. Items of different
-appearance may produce similar joint angles when held at
-the same palm location. The use of several grip patterns
-may expose more of the object, while also introducing
-additional variation if the object shifts between grips.
-These effects must be evaluated on recorded physical
-trials, rather than inferred from the network architecture.
+The internal results support the presence of class information
+in the final joint configuration. They do not establish
+performance on another recording day, a different exemplar
+of a named object, or an object absent from training.
+No separate novel-object
+rejection experiment is recorded in these reports.
 
-Gaussian angle perturbations can help tolerate small
-measurement changes but do not create new independent
-physical grasps. They cannot reproduce every change in
-placement, friction, compliance, or motor-current response.
-The study therefore relies on repeated real trials and
-later-session testing. If each class is represented by
-only one physical exemplar, recognition of another item
-from the same category remains a separate question.
+The 15-class set was selected after preliminary analysis
+of the recorded grasps. Its validation score is therefore
+a within-dataset, post-selection estimate rather than an
+independent test of a prospectively fixed class set.
+Likewise, the probability temperature and distance
+threshold were chosen from the held-out folds. Accepted
+accuracy on those folds may be optimistic for new data.
+Only five trials are available for each label; a single
+error changes that label's measured recall by 20
+percentage points.
+
+The final joint configuration is not a unique description
+of an object's shape. Items of different appearance may
+produce similar angles at the same palm location. Gaussian
+angle perturbations do not create independent physical
+grasps and cannot reproduce every change in placement,
+friction, compliance, or motor-current response. The
+software permits up to three grip sequences for an
+uncertain recognition and averages neural probabilities,
+but the saved validation reports evaluate individual
+sequences; they do not measure the benefit of repetition.
+A future independent test should fix the class set,
+model, and thresholds before collecting labeled grasps
+in later sessions, include new object instances, and
+reserve some entire object classes to measure unknown
+rejection.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-This work specifies a physical-only proprioceptive
-recognition system for 20 household objects using a
-LEAP Hand. Current thresholds stop contacted fingers,
-and the final angles from three sequential grips form
-a 48-value input to a compact neural classifier.
-The software supports resumable collection, trial
-retakes, class probabilities, uncertain or unknown
-decisions, and repeated recognition attempts.
-
-The evaluation protocol includes held-out physical
-accuracy, per-class performance, decision coverage, and
-tests on later sessions and unseen objects.
+This work demonstrates physical-only proprioceptive
+recognition with a LEAP Hand using three sequential
+grips and a 48-angle neural input. In internal three-fold
+validation, the 15-class model classified 70/75 trials
+correctly and accepted 67/75 as known-class decisions.
+Of the accepted decisions, 65 were correct.
+The nearest-trial baseline provided a separate
+leave-one-trial-out comparison. These measurements show
+that final grasp angles distinguish many enrolled items
+under the recorded conditions. Independent sessions,
+new physical instances, unseen objects, and the effect
+of repeat grasps remain to be tested.
 
 \bibliographystyle{elsart-harv}
 \bibliography{manuscript}
