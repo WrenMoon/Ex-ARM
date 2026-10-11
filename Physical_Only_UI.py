@@ -17,7 +17,7 @@ from Grasp import grasp
 from Physical_Only_Proprioception import (
     collect_one_trial, create_collection, dataset_folder, expand_collection,
     format_leave_one_out, load_model, load_neural_model, open_hand,
-    pending_trials, read_collection, recognize_once, release_hand,
+    pending_trials, predict, read_collection, release_hand,
     retake_trial, save_grasp, train_dataset, train_neural_dataset,
     trial_complete,
 )
@@ -881,7 +881,8 @@ class PhysicalOnlyUI:
         self.root.configure(bg=BG)
         self.events = Queue()
         self.busy = False
-        self.neural_session = None
+        self.recognition_session = None
+        self.last_recognition = None
         self.score_dataset = None
         self.info = None
         self.mode = "neural"
@@ -1205,19 +1206,20 @@ class PhysicalOnlyUI:
 
     def build_recognize_page(self):
         page = self.page()
-        self.mode_toggle = Segmented(page, ["Neural network", "Nearest trial"],
+        self.mode_toggle = Segmented(page, ["View neural", "View nearest"],
                                      self.set_mode, height=40)
         self.mode_toggle.pack(fill="x", pady=(0, px(12)))
-        card = Card(page, "Identify object")
+        card = Card(page, "Identify object", "One grasp is evaluated by both trained models.")
         card.pack(fill="x", pady=(0, px(12)))
         self.run_hint = self.text(card.body, "", 10, MUTED, wraplength=px(320))
         self.run_hint.pack(anchor="w")
         self.pips = tk.Canvas(card.body, height=px(30), bg=CARD, highlightthickness=0)
         self.pips.pack(fill="x", pady=(px(12), 0))
         self.pips.bind("<Configure>", lambda event: self.draw_pips())
-        self.run_button = self.action(card.body, "Run neural grasp", self.run_grasp, height=54)
+        self.run_button = self.action(card.body, "Run recognition grasp", self.run_grasp,
+                                      height=54)
         self.run_button.pack(fill="x", pady=(px(14), px(8)))
-        self.reset_button = self.action(card.body, "Start a new reading", self.reset_neural,
+        self.reset_button = self.action(card.body, "Start a new reading", self.reset_recognition,
                                         kind="ghost", height=40)
         self.reset_button.pack(fill="x")
 
@@ -1238,7 +1240,7 @@ class PhysicalOnlyUI:
         column = tk.Frame(body, bg=BG)
         column.grid(row=0, column=1, sticky="nsew", padx=(0, px(14)))
         column.grid_columnconfigure(0, weight=1)
-        column.grid_rowconfigure(1, weight=1)
+        column.grid_rowconfigure(2, weight=1)
 
         hero = Card(column, "Final output", pad=20)
         hero.grid(row=0, column=0, sticky="ew")
@@ -1262,8 +1264,19 @@ class PhysicalOnlyUI:
         for cell in self.output_stats:
             cell[0].pack(side="left", fill="x", expand=True)
 
+        comparison = Card(column, "Both models  ·  same grasp", pad=14)
+        comparison.grid(row=1, column=0, sticky="ew", pady=(px(14), 0))
+        for title, attribute in (("NEURAL NETWORK", "neural"),
+                                 ("NEAREST TRIAL", "nearest")):
+            row = tk.Frame(comparison.body, bg=CARD)
+            row.pack(fill="x", pady=px(3))
+            self.text(row, title, 8, FAINT, "bold", width=19).pack(side="left")
+            label = self.text(row, "Awaiting grasp", 12, MUTED, "bold")
+            label.pack(side="left", fill="x", expand=True)
+            setattr(self, f"{attribute}_result_label", label)
+
         scores = Card(column, "Class probabilities", pad=16)
-        scores.grid(row=1, column=0, sticky="nsew", pady=(px(14), 0))
+        scores.grid(row=2, column=0, sticky="nsew", pady=(px(14), 0))
         self.scores_card = scores
         self.chart_note = self.text(scores.header, "", 9, FAINT)
         self.chart_note.pack(side="right")
@@ -1271,7 +1284,7 @@ class PhysicalOnlyUI:
         self.chart.pack(fill="both", expand=True)
 
         activity = Card(column, "Activity", pad=14)
-        activity.grid(row=2, column=0, sticky="ew", pady=(px(14), 0))
+        activity.grid(row=3, column=0, sticky="ew", pady=(px(14), 0))
         self.log_box = tk.Text(activity.body, height=5, bg=CARD, fg=MUTED, relief="flat",
                                font=font(9, mono=True), wrap="word", highlightthickness=0,
                                bd=0, state="disabled", cursor="arrow")
@@ -1344,8 +1357,11 @@ class PhysicalOnlyUI:
         classes = self.info["classes"] if self.info else []
         self.set_output("AWAITING GRASP", "Run a grasp from the Recognize step to identify "
                         "the object in the hand.", MUTED)
+        self.neural_result_label.configure(text="Awaiting grasp", fg=MUTED)
+        self.nearest_result_label.configure(text="Awaiting grasp", fg=MUTED)
         self.gauge.set(None)
-        self.show_scores({name: 0.0 for name in classes}, probability=True)
+        self.show_scores({name: 0.0 for name in classes},
+                         probability=self.mode == "neural")
         if self.mode == "neural":
             self.set_stats([("Confidence", "—"), ("Margin", "—"), ("Distance", "—"),
                             ("Grasps", f"0 / {PhysicalOnly.network_max_grasps}")])
@@ -1469,7 +1485,7 @@ class PhysicalOnlyUI:
         self.confusion.set(neural)
 
     def session_results(self):
-        session = self.neural_session
+        session = self.recognition_session
         if session and self.info and session["name"] == self.info["name"]:
             return session["results"]
         return []
@@ -1477,9 +1493,10 @@ class PhysicalOnlyUI:
     def draw_pips(self):
         canvas = self.pips
         canvas.delete("all")
-        if self.mode != "neural":
+        session = self.recognition_session
+        if session and session["neural_model"] is None:
             canvas.create_text(0, px(15), anchor="w", fill=FAINT, font=font(9, "bold"),
-                               text="SINGLE GRASP  ·  DISTANCE TO EVERY SAVED TRIAL")
+                               text="SINGLE GRASP  ·  NEAREST-TRIAL MODEL")
             return
         results = self.session_results()
         size, gap = px(16), px(10)
@@ -1502,26 +1519,25 @@ class PhysicalOnlyUI:
         self.collect_button.set_enabled(bool(info and info["pending"]))
         self.retake_button.set_enabled(bool(info and self.retake_class.get()))
         results = self.session_results()
-        if self.mode == "neural":
+        session = self.recognition_session
+        if session and session["neural_model"] is not None:
             number = len(results) + 1
             if number > PhysicalOnly.network_max_grasps:
                 self.run_button.set_text("Reading complete")
                 self.run_button.set_enabled(False)
             else:
-                self.run_button.set_text("Run neural grasp" if number == 1
+                self.run_button.set_text("Run recognition grasp" if number == 1
                                          else f"Grasp again  ({number} of "
                                               f"{PhysicalOnly.network_max_grasps})")
                 self.run_button.set_enabled(True)
-            self.reset_button.set_enabled(bool(results))
-            self.run_hint.configure(text="Place the object, then run a grasp. If the result is "
-                                    "uncertain, grasp again: probabilities are averaged across "
-                                    "the reading.")
         else:
-            self.run_button.set_text("Run nearest-trial grasp")
+            self.run_button.set_text("Run recognition grasp")
             self.run_button.set_enabled(True)
-            self.reset_button.set_enabled(False)
-            self.run_hint.configure(text="One grasp, compared with every saved physical trial. "
-                                    "Scores are angle distances, not probabilities.")
+        self.reset_button.set_enabled(bool(results))
+        self.run_hint.configure(text="One grasp feeds both available models. If the neural "
+                                "result is uncertain, grasp again to average its "
+                                "probabilities. Start a new reading before changing objects; "
+                                "switch views to inspect either result.")
         self.draw_pips()
 
     def set_busy(self, value, label="Idle", live=False):
@@ -1566,7 +1582,8 @@ class PhysicalOnlyUI:
             name = None
             self.info = None
         if name != self.score_dataset:
-            self.neural_session = None
+            self.recognition_session = None
+            self.last_recognition = None
             self.score_dataset = name
             self.clear_output()
         self.render_info()
@@ -1590,9 +1607,11 @@ class PhysicalOnlyUI:
 
     def set_mode(self, index):
         self.mode = "neural" if index == 0 else "nearest"
-        self.neural_session = None
         self.output_chip.set("NEURAL NETWORK" if index == 0 else "NEAREST TRIAL", ACCENT)
-        self.clear_output()
+        if self.last_recognition is None:
+            self.clear_output()
+        else:
+            self.show_recognition_result(self.last_recognition)
         self.update_controls()
 
     def create_plan(self):
@@ -1607,7 +1626,8 @@ class PhysicalOnlyUI:
             classes = parse_class_counts(self.new_classes.get("1.0", "end"), count)
             create_collection(name, list(classes), classes)
             self.dataset.set(name)
-            self.neural_session = None
+            self.recognition_session = None
+            self.last_recognition = None
             self.score_dataset = None
             self.refresh_dataset()
             self.new_name.delete(0, "end")
@@ -1626,7 +1646,8 @@ class PhysicalOnlyUI:
             selected = parse_class_counts(self.extra_classes.get("1.0", "end"))
             added = parse_class_counts(self.add_classes.get("1.0", "end"))
             result = expand_collection(name, extra, selected, added)
-            self.neural_session = None
+            self.recognition_session = None
+            self.last_recognition = None
             self.score_dataset = None
             self.refresh_dataset()
             if result:
@@ -1668,7 +1689,10 @@ class PhysicalOnlyUI:
             self.error("Collect", error)
 
     def trial_collected(self, result):
+        self.recognition_session = None
+        self.last_recognition = None
         self.refresh_dataset()
+        self.clear_output()
         if result["remaining"] == 0:
             self.set_status(f"Saved {result['class_name']} grasp {result['trial']}. Collection "
                             "complete; nearest-trial model trained.", "ok")
@@ -1706,8 +1730,10 @@ class PhysicalOnlyUI:
             self.error("Retake trial", error)
 
     def trial_retaken(self, class_name, trial):
-        self.neural_session = None
+        self.recognition_session = None
+        self.last_recognition = None
         self.refresh_dataset()
+        self.clear_output()
         self.set_status(f"Retaken {class_name} trial {trial}; previous trial archived. "
                         "Retrain the neural model before using it again.", "ok")
         if self.info and not self.info["pending"]:
@@ -1734,99 +1760,86 @@ class PhysicalOnlyUI:
             self.error("Train neural model", error)
 
     def nearest_trained(self, model):
+        self.recognition_session = None
+        self.last_recognition = None
         self.refresh_dataset()
+        self.clear_output()
         total = model["leave_one_out_total"]
         score = f"; leave-one-out {model['leave_one_out_correct']}/{total}" if total else ""
         self.set_status(f"Nearest-trial model saved: {len(model['samples'])} grasps{score}", "ok")
 
     def neural_trained(self, result):
         _, report = result
-        self.neural_session = None
+        self.recognition_session = None
+        self.last_recognition = None
         self.refresh_dataset()
+        self.clear_output()
         self.set_status(f"Neural model saved: {report['validation_correct']}/"
                         f"{report['validation_total']} held-out trials correct", "ok")
 
     def run_grasp(self):
-        if self.mode == "neural":
-            self.neural_grasp()
-        else:
-            self.nearest_grasp()
-
-    def nearest_grasp(self):
         if self.busy:
             return
         try:
             name = self.selected_name()
-            load_model(name)
-            if not Dialog.ask(self.root, "Ready for grasp",
-                              "Place the object at the training position, then start the hand.",
-                              "Start grasp"):
-                return
-            self.run_job("Nearest-trial grasp",
-                         lambda: recognize_once(name, on_angles=self.queue_angles,
-                                                on_grip=self.queue_grip),
-                         self.nearest_result, live=True)
-        except (OSError, ValueError, FileNotFoundError) as error:
-            self.error("Recognize", error)
-
-    def nearest_result(self, output):
-        model = load_model(output["dataset"])
-        angles = output["final_angles_deg"]
-        distances = {class_name: min(math.dist(angles, item["angles_deg"])
-                                     for item in model["samples"]
-                                     if item["class_name"] == class_name)
-                     for class_name in model["classes"]}
-        prediction = output["prediction"]
-        ranked = sorted(distances.values())
-        gap = ranked[1] - ranked[0] if len(ranked) > 1 else 0.0
-        separation = 1 - ranked[0] / ranked[1] if len(ranked) > 1 and ranked[1] > 0 else 1.0
-        class_name = prediction["class_name"]
-        self.set_output(class_name.replace("_", " ").upper(),
-                        f"Closest saved trial: {class_name} #{prediction['nearest_trial']}, "
-                        f"{prediction['distance_deg']:.1f}° away in joint space.", ACCENT)
-        self.gauge.set(separation, ACCENT, "separation")
-        self.set_stats([("Nearest trial", f"{class_name.title()} #{prediction['nearest_trial']}"),
-                        ("Distance", f"{prediction['distance_deg']:.1f}°"),
-                        ("Runner-up gap", f"{gap:.1f}°"), ("Grasps", "1")])
-        self.show_scores(distances, probability=False, highlight=class_name)
-        self.set_status(f"Nearest-trial result: {class_name}. Saved to runs/", "ok")
-
-    def reset_neural(self):
-        if self.busy:
-            return
-        self.neural_session = None
-        self.clear_output()
-        self.update_controls()
-        self.set_status("New neural reading ready")
-
-    def neural_grasp(self):
-        if self.busy:
-            return
-        try:
-            name = self.selected_name()
-            if self.neural_session is None or self.neural_session["name"] != name:
-                model = load_neural_model(name)
+            session = self.recognition_session
+            if session is None or session["name"] != name or session["neural_model"] is None:
+                errors = {}
+                try:
+                    nearest_model = load_model(name)
+                except (OSError, ValueError, KeyError) as error:
+                    nearest_model = None
+                    errors["nearest"] = str(error)
+                try:
+                    neural_model = load_neural_model(name)
+                except (OSError, ValueError, KeyError, ModuleNotFoundError) as error:
+                    neural_model = None
+                    errors["neural"] = str(error)
+                if nearest_model is None and neural_model is None:
+                    raise ValueError("Train a model before recognition. "
+                                     + "; ".join(errors.values()))
                 timestamp = datetime.now(timezone.utc)
-                folder = dataset_folder(name) / "neural_runs" / timestamp.strftime(
+                run_type = "neural_runs" if neural_model is not None else "runs"
+                folder = dataset_folder(name) / run_type / timestamp.strftime(
                     "%Y%m%d_%H%M%S_%f")
-                self.neural_session = dict(name=name, model=model, folder=folder,
-                                           time=timestamp, results=[])
-            session = self.neural_session
+                session = dict(name=name, nearest_model=nearest_model,
+                               neural_model=neural_model, errors=errors, folder=folder,
+                               time=timestamp, results=[])
+                self.recognition_session = session
+                for model_name, reason in errors.items():
+                    self.log(f"{model_name.title()} model unavailable: {reason}", "warn")
+                if neural_model is None and self.mode == "neural":
+                    self.mode = "nearest"
+                    self.mode_toggle.select(1)
+                elif nearest_model is None and self.mode == "nearest":
+                    self.mode = "neural"
+                    self.mode_toggle.select(0)
             number = len(session["results"]) + 1
-            if number > PhysicalOnly.network_max_grasps:
-                raise ValueError("Maximum repeat grasps reached. Start a new neural reading")
+            if session["neural_model"] is not None and number > PhysicalOnly.network_max_grasps:
+                raise ValueError("Maximum repeat grasps reached. Start a new reading")
             prompt = ("Place the object at the training position, then start the hand."
                       if number == 1 else
-                      f"Reposition the object for grasp {number}. Probabilities will be "
-                      "averaged with the previous grasps.")
-            if not Dialog.ask(self.root, f"Neural grasp {number}", prompt, "Start grasp"):
+                      f"Reposition the object for grasp {number}. Neural probabilities "
+                      "will be averaged with the previous grasps.")
+            if not Dialog.ask(self.root, f"Recognition grasp {number}", prompt,
+                              "Start grasp"):
                 return
-            self.run_job(f"Neural grasp {number}", lambda: self.neural_step(session, number),
-                         self.neural_result, live=True)
-        except (OSError, ValueError, FileNotFoundError) as error:
-            self.error("Neural recognition", error)
+            self.run_job(f"Recognition grasp {number}",
+                         lambda: self.recognition_step(session, number),
+                         self.recognition_result, live=True)
+        except (OSError, ValueError, KeyError, ModuleNotFoundError) as error:
+            self.error("Recognition", error)
 
-    def neural_step(self, session, number):
+    def reset_recognition(self):
+        if self.busy:
+            return
+        self.recognition_session = None
+        self.last_recognition = None
+        self.clear_output()
+        self.update_controls()
+        self.set_status("New recognition reading ready")
+
+    def recognition_step(self, session, number):
         hand = open_hand()
         try:
             try:
@@ -1839,45 +1852,107 @@ class PhysicalOnlyUI:
                 self.queue_grip(1)
         finally:
             hand.close()
-        model = session["model"]
-        prediction = model.predict(angles)
-        results = session["results"] + [dict(angles_deg=angles, prediction=prediction)]
-        probabilities = [sum(item["prediction"]["probabilities"][class_name]
-                             for item in results) / len(results)
-                         for class_name in model.class_names]
-        distance = statistics.median(item["prediction"]["distance"] for item in results)
-        combined = model.evaluate(probabilities, distance)
+        nearest_model = session["nearest_model"]
+        neural_model = session["neural_model"]
+        nearest = predict(angles, nearest_model["samples"]) if nearest_model else None
+        neural = neural_model.predict(angles) if neural_model else None
+        results = session["results"] + [dict(angles_deg=angles,
+                                              prediction=neural if neural else nearest,
+                                              neural_prediction=neural,
+                                              nearest_prediction=nearest)]
+        combined = None
+        if neural_model is not None:
+            probabilities = [sum(item["neural_prediction"]["probabilities"][class_name]
+                                 for item in results) / len(results)
+                             for class_name in neural_model.class_names]
+            distance = statistics.median(item["neural_prediction"]["distance"]
+                                         for item in results)
+            combined = neural_model.evaluate(probabilities, distance)
         output = dict(time_utc=session["time"].isoformat(), dataset=session["name"],
-                      grasp_count=len(results), prediction=combined, grasps=results)
+                      grasp_count=len(results), final_angles_deg=angles,
+                      prediction=combined if combined else nearest,
+                      neural_prediction=combined, nearest_prediction=nearest,
+                      grasps=results)
+        if session["errors"]:
+            output["unavailable_models"] = session["errors"]
         (session["folder"] / "recognition_result.json").write_text(
             json.dumps(output, indent=2) + "\n")
         return output
 
-    def neural_result(self, output):
-        session = self.neural_session
+    def recognition_result(self, output):
+        session = self.recognition_session
         session["results"] = output["grasps"]
-        prediction = output["prediction"]
-        class_name = prediction["class_name"]
-        color = decision_color(class_name)
-        count = output["grasp_count"]
-        if prediction["reason"]:
-            detail = (f"{prediction['reason'].capitalize()}. Best guess: "
-                      f"{prediction['best_class']}. Grasp again to add evidence.")
-        else:
-            detail = f"Accepted after {count} grasp{'s' if count > 1 else ''}."
-        self.set_output(class_name.replace("_", " ").upper(), detail, color)
-        self.gauge.set(prediction["confidence"], color)
-        self.set_stats([("Confidence", f"{prediction['confidence'] * 100:.1f}%"),
-                        ("Margin", f"{prediction['margin'] * 100:.1f}%"),
-                        ("Distance", f"{prediction['distance']:.3f} / "
-                                     f"{session['model'].max_distance:.3f}"),
-                        ("Grasps", f"{count} / {PhysicalOnly.network_max_grasps}")])
-        self.show_scores(prediction["probabilities"], probability=True,
-                         highlight=prediction["best_class"], color=color)
+        self.last_recognition = output
+        self.show_recognition_result(output)
         self.update_controls()
-        reason = f" ({prediction['reason']})" if prediction["reason"] else ""
-        self.set_status(f"Neural result after {count} grasp(s): {class_name}{reason}",
-                        "warn" if prediction["reason"] else "ok")
+        neural = output["neural_prediction"]
+        nearest = output["nearest_prediction"]
+        neural_name = neural["class_name"] if neural else "unavailable"
+        nearest_name = nearest["class_name"] if nearest else "unavailable"
+        self.set_status(f"Grasp {output['grasp_count']}: neural {neural_name}; "
+                        f"nearest trial {nearest_name}",
+                        "warn" if neural and neural["reason"] else "ok")
+
+    def show_recognition_result(self, output):
+        neural = output["neural_prediction"]
+        nearest = output["nearest_prediction"]
+        self.neural_result_label.configure(
+            text=(neural["class_name"].replace("_", " ").title()
+                  if neural else "Unavailable"),
+            fg=decision_color(neural["class_name"]) if neural else MUTED)
+        self.nearest_result_label.configure(
+            text=(f"{nearest['class_name'].replace('_', ' ').title()}  ·  "
+                  f"{nearest['distance_deg']:.1f}°" if nearest else "Unavailable"),
+            fg=ACCENT if nearest else MUTED)
+        if self.mode == "neural" and neural is None:
+            self.mode = "nearest"
+            self.mode_toggle.select(1)
+        elif self.mode == "nearest" and nearest is None:
+            self.mode = "neural"
+            self.mode_toggle.select(0)
+        self.output_chip.set("NEURAL NETWORK" if self.mode == "neural"
+                             else "NEAREST TRIAL", ACCENT)
+        if self.mode == "neural":
+            class_name = neural["class_name"]
+            color = decision_color(class_name)
+            count = output["grasp_count"]
+            if neural["reason"]:
+                detail = (f"{neural['reason'].capitalize()}. Best guess: "
+                          f"{neural['best_class']}. Grasp again to add evidence.")
+            else:
+                detail = f"Accepted after {count} grasp{'s' if count > 1 else ''}."
+            self.set_output(class_name.replace("_", " ").upper(), detail, color)
+            self.gauge.set(neural["confidence"], color)
+            model = self.recognition_session["neural_model"]
+            self.set_stats([("Confidence", f"{neural['confidence'] * 100:.1f}%"),
+                            ("Margin", f"{neural['margin'] * 100:.1f}%"),
+                            ("Distance", f"{neural['distance']:.3f} / "
+                                         f"{model.max_distance:.3f}"),
+                            ("Grasps", f"{count} / {PhysicalOnly.network_max_grasps}")])
+            self.show_scores(neural["probabilities"], probability=True,
+                             highlight=neural["best_class"], color=color)
+        else:
+            model = self.recognition_session["nearest_model"]
+            angles = output["final_angles_deg"]
+            distances = {class_name: min(math.dist(angles, item["angles_deg"])
+                                         for item in model["samples"]
+                                         if item["class_name"] == class_name)
+                         for class_name in model["classes"]}
+            ranked = sorted(distances.values())
+            gap = ranked[1] - ranked[0] if len(ranked) > 1 else 0.0
+            separation = (1 - ranked[0] / ranked[1]
+                          if len(ranked) > 1 and ranked[1] > 0 else 1.0)
+            class_name = nearest["class_name"]
+            self.set_output(class_name.replace("_", " ").upper(),
+                            f"Closest saved trial: {class_name} #{nearest['nearest_trial']}, "
+                            f"{nearest['distance_deg']:.1f}° away in joint space.", ACCENT)
+            self.gauge.set(separation, ACCENT, "separation")
+            self.set_stats([("Nearest trial", f"{class_name.title()} "
+                                              f"#{nearest['nearest_trial']}"),
+                            ("Distance", f"{nearest['distance_deg']:.1f}°"),
+                            ("Runner-up gap", f"{gap:.1f}°"),
+                            ("Grasps", str(output["grasp_count"]))])
+            self.show_scores(distances, probability=False, highlight=class_name)
 
     # ---------- background work ----------
 
@@ -1920,7 +1995,10 @@ class PhysicalOnlyUI:
                         self.error("Display failed", error)
                 elif kind == "error":
                     self.set_busy(False)
+                    self.recognition_session = None
+                    self.last_recognition = None
                     self.refresh_dataset()
+                    self.clear_output()
                     self.error("Operation failed", value)
         except Empty:
             pass
