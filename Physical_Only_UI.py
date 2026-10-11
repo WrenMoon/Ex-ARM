@@ -644,12 +644,14 @@ class HandView(tk.Canvas):
     """Offscreen MuJoCo render of the LEAP hand that fills its panel."""
 
     DEFAULT_VIEW = (100.0, -25.0)
+    MAX_RENDER = 1000
 
     def __init__(self, parent):
         super().__init__(parent, bg="#0c1222", highlightthickness=0, bd=0,
                          width=px(PhysicalOnly.ui_preview_width),
                          height=px(PhysicalOnly.ui_preview_height))
         self.image = None
+        self.zoom_factor = 1
         self.renderer = None
         self.size = None
         self.last_mouse = None
@@ -720,7 +722,8 @@ class HandView(tk.Canvas):
     def rebuild(self):
         self.resize_job = None
         width, height = max(160, self.winfo_width()), max(160, self.winfo_height())
-        width, height = min(width, 2400), min(height, 1800)
+        self.zoom_factor = max(1, math.ceil(max(width, height) / self.MAX_RENDER))
+        width, height = width // self.zoom_factor, height // self.zoom_factor
         if self.ready and (width, height) != self.size:
             try:
                 renderer = self.mujoco.Renderer(self.model, height=height, width=width)
@@ -730,11 +733,14 @@ class HandView(tk.Canvas):
                 self.backdrop = self.np.broadcast_to(top + (bottom - top) * shade,
                                                      (height, width, 3)).astype(self.np.uint8)
                 if old is not None:
-                    old.close()
+                    try:
+                        old.close()
+                    except Exception:
+                        pass
             except Exception as error:
+                self.error = str(error)
                 if self.renderer is None:
                     self.ready = False
-                    self.error = str(error)
         self.draw()
 
     def set_pose(self, angles):
@@ -794,13 +800,24 @@ class HandView(tk.Canvas):
                                  tags="frame")
             self.draw_overlay()
             return
-        self.renderer.update_scene(self.data, camera=self.camera)
-        pixels = self.renderer.render()
-        empty = pixels.max(axis=2) < 4
-        pixels = self.np.where(empty[:, :, None], self.backdrop, pixels)
-        rows, columns = pixels.shape[:2]
-        ppm = f"P6\n{columns} {rows}\n255\n".encode() + pixels.tobytes()
-        self.image = tk.PhotoImage(data=ppm, format="PPM")
+        try:
+            self.renderer.update_scene(self.data, camera=self.camera)
+            pixels = self.renderer.render()
+            empty = pixels.max(axis=2) < 4
+            pixels = self.np.where(empty[:, :, None], self.backdrop, pixels)
+            rows, columns = pixels.shape[:2]
+            ppm = f"P6\n{columns} {rows}\n255\n".encode() + pixels.tobytes()
+            image = tk.PhotoImage(data=ppm, format="PPM")
+            if self.zoom_factor > 1:
+                image = image.zoom(self.zoom_factor)
+            self.image = image
+        except Exception as error:
+            self.error = str(error)
+            self.size = None
+            self.schedule_resize(None)
+            if self.image is None:
+                self.draw_overlay()
+                return
         self.create_image(width / 2, height / 2, image=self.image, tags="frame")
         self.tag_lower("frame")
         self.draw_overlay()
