@@ -16,8 +16,10 @@ from tkinter import ttk
 from Grasp import grasp
 from Physical_Only_Proprioception import (
     collect_one_trial, create_collection, dataset_folder, expand_collection,
-    load_model, load_neural_model, open_hand, pending_trials, read_collection,
-    recognize_once, release_hand, save_grasp, train_dataset, train_neural_dataset,
+    format_leave_one_out, load_model, load_neural_model, open_hand,
+    pending_trials, read_collection, recognize_once, release_hand,
+    retake_trial, save_grasp, train_dataset, train_neural_dataset,
+    trial_complete,
 )
 from utils.Constants import Connection, PhysicalOnly, Proprioception
 
@@ -670,6 +672,17 @@ class HandView(tk.Canvas):
             self.model.vis.headlight.ambient[:] = 0.45
             self.model.vis.headlight.diffuse[:] = 0.75
             self.model.vis.headlight.specular[:] = 0.25
+            flip = np.zeros(4)
+            mujoco.mju_axisAngle2Quat(flip, np.array([1.0, 0.0, 0.0]), math.pi)
+            model = self.model
+            for body in np.flatnonzero(model.body_parentid == 0)[1:]:
+                model.body_pos[body] = (model.body_pos[body][0], -model.body_pos[body][1],
+                                        -model.body_pos[body][2])
+                mujoco.mju_mulQuat(model.body_quat[body], flip, model.body_quat[body].copy())
+            for geom in np.flatnonzero(model.geom_bodyid == 0):
+                model.geom_pos[geom] = (model.geom_pos[geom][0], -model.geom_pos[geom][1],
+                                        -model.geom_pos[geom][2])
+                mujoco.mju_mulQuat(model.geom_quat[geom], flip, model.geom_quat[geom].copy())
             self.data = mujoco.MjData(self.model)
             self.camera = mujoco.MjvCamera()
             self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
@@ -763,9 +776,9 @@ class HandView(tk.Canvas):
     def drag(self, event):
         if not self.ready or self.last_mouse is None:
             return
-        self.camera.azimuth += (event.x - self.last_mouse[0]) * 0.45
+        self.camera.azimuth -= (event.x - self.last_mouse[0]) * 0.45
         self.camera.elevation = max(-89, min(89,
-            self.camera.elevation + (event.y - self.last_mouse[1]) * 0.45))
+            self.camera.elevation - (event.y - self.last_mouse[1]) * 0.45))
         self.last_mouse = (event.x, event.y)
         self.draw()
 
@@ -836,7 +849,9 @@ def dataset_info(name):
         info["plan_error"] = str(error)
     if (folder / "model.json").exists():
         try:
-            model = json.loads((folder / "model.json").read_text())
+            model = load_model(name)
+            if info["pending"] or info["plan_error"]:
+                raise ValueError("Finish collection and retrain the nearest-trial model")
             info["nearest"] = model
             if not info["classes"] and not info["plan_error"]:
                 info["legacy"] = True
@@ -963,7 +978,10 @@ class PhysicalOnlyUI:
             direction = -1 if event.num == 4 else 1
         else:
             direction = -1 if event.delta > 0 else 1
-        widget = self.root.winfo_containing(event.x_root, event.y_root)
+        try:
+            widget = self.root.winfo_containing(event.x_root, event.y_root)
+        except KeyError:
+            return
         while widget is not None:
             if hasattr(widget, "on_wheel"):
                 widget.on_wheel(direction)
@@ -1102,6 +1120,20 @@ class PhysicalOnlyUI:
                   "records the final joint angles, saves the trial, then opens.", 10, FAINT,
                   wraplength=px(320)).pack(anchor="w")
 
+        retake = Card(page, "Retake a saved trial",
+                      "The previous reading is archived after the replacement is saved.")
+        retake.pack(fill="x", pady=(0, px(12)))
+        self.field_label(retake.body, "Class")
+        self.retake_class = ttk.Combobox(retake.body, state="readonly",
+                                          style="Dataset.TCombobox", font=font(11))
+        self.retake_class.pack(fill="x", ipady=px(2))
+        self.field_label(retake.body, "Trial number")
+        self.retake_number = self.entry(retake.body, "1")
+        self.retake_number.pack(fill="x", ipady=px(6))
+        self.retake_button = self.action(retake.body, "Retake selected trial",
+                                          self.retake_saved, kind="secondary")
+        self.retake_button.pack(fill="x", pady=(px(14), px(4)))
+
         expand = Card(page, "Expand dataset", "Available once every planned grasp is saved.")
         expand.pack(fill="x")
         self.field_label(expand.body, "Extra grasps for every class")
@@ -1130,6 +1162,24 @@ class PhysicalOnlyUI:
             cell[0].pack(side="left", fill="x", expand=True)
         self.action(nearest.body, "Train nearest-trial model", self.train_nearest,
                     kind="secondary").pack(fill="x", pady=(px(14), px(4)))
+
+        details = Card(page, "Leave-one-out by class and trial",
+                       "Each trial is classified with that trial left out of training.")
+        details.pack(fill="x", pady=(0, px(12)))
+        report_frame = tk.Frame(details.body, bg=FIELD)
+        report_frame.pack(fill="x")
+        self.leave_one_out_text = tk.Text(report_frame, height=13, bg=FIELD, fg=TEXT,
+                                          relief="flat", font=font(9, mono=True),
+                                          wrap="word", highlightthickness=0,
+                                          padx=px(8), pady=px(8), state="disabled")
+        report_scroll = ttk.Scrollbar(report_frame, orient="vertical",
+                                      style="Slim.Vertical.TScrollbar",
+                                      command=self.leave_one_out_text.yview)
+        self.leave_one_out_text.configure(yscrollcommand=report_scroll.set)
+        self.leave_one_out_text.on_wheel = lambda direction: self.leave_one_out_text.yview_scroll(
+            direction, "units")
+        self.leave_one_out_text.pack(side="left", fill="both", expand=True)
+        report_scroll.pack(side="right", fill="y")
 
         neural = Card(page, "Neural classifier",
                       f"{16 * len(Proprioception.grip)} joint readings → {PhysicalOnly.network_hidden_size} tanh units → "
@@ -1370,6 +1420,11 @@ class PhysicalOnlyUI:
         saved = sum(info["collected"].values()) if info else 0
         self.collect_bar.set(saved / total if total else 0)
         self.collect_count.configure(text=f"{saved} OF {total} GRASPS SAVED" if total else "")
+        retake_classes = ([name for name in info["classes"]
+                           if info["collected"].get(name, 0) > 0] if info else [])
+        self.retake_class.configure(values=retake_classes)
+        if self.retake_class.get() not in retake_classes:
+            self.retake_class.set(retake_classes[0] if retake_classes else "")
         if info and info["pending"]:
             class_name, trial = info["pending"][0]
             self.next_class.configure(text=class_name.replace("_", " ").upper(), fg=TEXT)
@@ -1396,6 +1451,12 @@ class PhysicalOnlyUI:
         else:
             self.nearest_state[2].configure(text="Not trained", fg=MUTED)
             self.nearest_score[2].configure(text="—")
+        report = (format_leave_one_out(nearest) if nearest else
+                  "Train the nearest-trial model to see each class and trial.")
+        self.leave_one_out_text.configure(state="normal")
+        self.leave_one_out_text.delete("1.0", "end")
+        self.leave_one_out_text.insert("1.0", report)
+        self.leave_one_out_text.configure(state="disabled")
         if neural:
             self.neural_state[2].configure(text="Trained", fg=ACCENT)
             self.neural_score[2].configure(
@@ -1439,6 +1500,7 @@ class PhysicalOnlyUI:
             return
         info = self.info
         self.collect_button.set_enabled(bool(info and info["pending"]))
+        self.retake_button.set_enabled(bool(info and self.retake_class.get()))
         results = self.session_results()
         if self.mode == "neural":
             number = len(results) + 1
@@ -1468,6 +1530,8 @@ class PhysicalOnlyUI:
             control.set_enabled(not value)
         self.mode_toggle.set_enabled(not value)
         self.dataset_box.configure(state="disabled" if value else "normal")
+        self.retake_class.configure(state="disabled" if value else "readonly")
+        self.retake_number.configure(state="disabled" if value else "normal")
         self.spinner.set_active(value)
         self.status_pill.configure(text=label if value else "Idle",
                                    fg=AMBER if value else TEXT)
@@ -1608,9 +1672,46 @@ class PhysicalOnlyUI:
         if result["remaining"] == 0:
             self.set_status(f"Saved {result['class_name']} grasp {result['trial']}. Collection "
                             "complete; nearest-trial model trained.", "ok")
+            self.show_page(2)
         else:
             self.set_status(f"Saved {result['class_name']} grasp {result['trial']}; hand opened. "
                             f"{result['remaining']} grasps remain", "ok")
+
+    def retake_saved(self):
+        if self.busy:
+            return
+        try:
+            name = self.selected_name()
+            class_name = self.retake_class.get().strip()
+            trial = int(self.retake_number.get().strip())
+            plan = read_collection(name)
+            if class_name not in plan["trial_counts"]:
+                raise ValueError("Select a class with saved grasps")
+            if trial < 1 or trial > plan["trial_counts"][class_name]:
+                raise ValueError(f"Choose a trial from 1 to {plan['trial_counts'][class_name]}")
+            folder = dataset_folder(name) / "trials" / class_name / str(trial)
+            if not trial_complete(folder):
+                raise ValueError(f"Trial {trial} for {class_name} is incomplete")
+            if not Dialog.ask(self.root, "Retake saved trial",
+                              f"Place {class_name} at the marked position for trial {trial}. "
+                              "The hand will close, save the replacement, then open. "
+                              "The previous trial will be archived.", "Retake trial"):
+                return
+            self.run_job(f"Retaking {class_name} #{trial}",
+                         lambda: retake_trial(name, class_name, trial,
+                                              on_angles=self.queue_angles,
+                                              on_grip=self.queue_grip),
+                         lambda result: self.trial_retaken(class_name, trial), live=True)
+        except (OSError, ValueError, FileNotFoundError) as error:
+            self.error("Retake trial", error)
+
+    def trial_retaken(self, class_name, trial):
+        self.neural_session = None
+        self.refresh_dataset()
+        self.set_status(f"Retaken {class_name} trial {trial}; previous trial archived. "
+                        "Retrain the neural model before using it again.", "ok")
+        if self.info and not self.info["pending"]:
+            self.show_page(2)
 
     def train_nearest(self):
         if self.busy:

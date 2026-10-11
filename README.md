@@ -142,26 +142,26 @@ Run `python Physical_Only_Proprioception.py`, or choose **Physical-only object r
 | Menu option | Action |
 | --- | --- |
 | **1** | Create a collection plan or resume its remaining grasps; train the nearest-trial model when complete |
-| **2** | Rebuild the nearest-trial model from saved, complete trials |
-| **3** | Identify one object with the nearest-trial model |
-| **4** | Quit this menu |
-| **5** | Add trials to all or selected classes, or add new classes; then collect them |
-| **6** | Train or retrain the physical-only neural classifier |
+| **2** | Add trials to all or selected classes, or add new classes; then collect them |
+| **3** | Retake a saved trial; keep the original in `retaken/` |
+| **4** | Rebuild the nearest-trial model and show each class and trial's leave-one-out result |
+| **5** | Train or retrain the physical-only neural classifier |
+| **6** | Identify one object with the nearest-trial model |
 | **7** | Identify with the neural classifier, with repeat grasps when needed |
 | **8** | Open the physical-only presentation UI |
-| **9** | Retake a saved trial; keep the original in `retaken/` |
+| **0** | Quit this menu |
 
-For a new study, choose a **new dataset name**, enter at least two class names and the desired number of trials per class, and collect the prompted trials. One completed trial contains all configured grips and is stored at `Data/Proprioception/Physical_Only/<dataset>/trials/<class>/<number>/` as `grasp_results.csv` plus the full `log.csv`. The program saves `collection.json` **before** collecting, so after an interruption you can choose option **1** and enter the same dataset name to resume. It skips complete trials and moves incomplete trial folders to `incomplete/` for inspection. After each saved collection trial, the hand is commanded open before the next placement prompt. Press **R** at the follow-up prompt to retake that trial immediately, or use option **9** later to select a class and trial number.
+For a new study, choose a **new dataset name**, enter at least two class names and the desired number of trials per class, and collect the prompted trials. One completed trial contains all configured grips and is stored at `Data/Proprioception/Physical_Only/<dataset>/trials/<class>/<number>/` as `grasp_results.csv` plus the full `log.csv`. The program saves `collection.json` **before** collecting, so after an interruption you can choose option **1** and enter the same dataset name to resume. It skips complete trials and moves incomplete trial folders to `incomplete/` for inspection. After each saved collection trial, the hand is commanded open before the next placement prompt. Press **R** at the follow-up prompt to retake that trial immediately, or use option **3** later to select a class and trial number.
 
-When all planned trials are present, option **1** trains `model.json` automatically. Choose **6 separately** to train `neural_model.npz`. To add data later, first finish any pending collection, then choose **5**. New trials or classes change the dataset: retrain the neural model before option **7**. Use a **new dataset** if you change the grasp, motor IDs, or offsets; the saved plan and models check these settings and reject incompatible measurements.
+When all planned trials are present, option **1** trains `model.json` automatically. Choose **5 separately** to train `neural_model.npz`. To add data later, first finish any pending collection, then choose **2**. New trials or classes change the dataset: retrain the neural model before option **7**. Use a **new dataset** if you change the grasp, motor IDs, or offsets; the saved plan and models check these settings and reject incompatible measurements.
 
 The checked-in `initial_9` pilot has three real grasps each of a 7.5 cm side-length cube, a 7.5 cm diameter sphere, and a 5 cm diameter cylinder. `Household_1` contains four household classes (`ball`, `bottle`, `bowl`, `mouse`) and a nearest-trial model. These are pilots, not the proposed 20-object experiment.
 
-For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real trials per class, train the neural model with option **6**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **5** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts selects `PhysicalOnly.default_dataset_name`, which is `multi_grip_study` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
+For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real trials per class, train the neural model with option **5**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **2** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts selects `PhysicalOnly.default_dataset_name`, which is `multi_grip_study` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
 
 ### How it works: two class-only models
 
-**Nearest-trial baseline.** [Physical_Only_Proprioception.py](Physical_Only_Proprioception.py) saves all measured angle vectors in `model.json`. Prediction chooses the class of the saved vector with the smallest Euclidean distance in **degrees**. Its leave-one-trial-out report excludes each trial in turn when scoring that trial. This baseline has no probability or unknown-object decision: it always chooses one of its saved classes.
+**Nearest-trial baseline.** [Physical_Only_Proprioception.py](Physical_Only_Proprioception.py) saves all measured angle vectors in `model.json`. Prediction chooses the class of the saved vector with the smallest Euclidean distance in **degrees**. Its leave-one-trial-out report excludes each trial in turn when scoring that trial. The terminal and UI show PASS or FAIL for every class and trial, including the predicted class and nearest saved trial; `model.json` keeps the same breakdown. This baseline has no probability or unknown-object decision: it always chooses one of its saved classes.
 
 **Neural classifier.** [PhysicalOnlyNetwork.py](utils/PhysicalOnlyNetwork.py) normalizes each angle by its grip and joint's configured start-to-target span; joints with zero span contribute no normalized change. A dense **(16 × grips) → 24 tanh → number-of-classes** network produces softmax class probabilities. Training uses NumPy and Adam, class balancing, weight decay, and, by default, 20 noisy copies plus the original of each real trial. The synthetic copies add both per-joint and shared-per-finger Gaussian angle noise to every grip. They help tolerance to small measurement changes but are not additional independent grasps.
 
@@ -175,8 +175,8 @@ The checked-in `initial_9` neural report records **9/9** correct held-out pilot 
 
 Open `python Physical_Only_UI.py` or choose option **8** in the physical-only terminal menu. The [UI](Physical_Only_UI.py) operates on the **same datasets and models**:
 
-- **Collect:** create a plan, collect the next pending grasp, or expand a completed plan. The hand opens after each saved collection grasp.
-- **Train:** build the nearest-trial model or neural classifier.
+- **Collect:** create a plan, collect the next pending grasp, retake a saved trial, or expand a completed plan. The hand opens after each collection or retake grasp.
+- **Train:** build the nearest-trial model or neural classifier. The nearest-trial card shows a scrollable leave-one-out result for every class and trial; the neural report uses held-out folds instead.
 - **Recognize:** run a nearest-trial grasp or start and repeat a neural reading. The neural view shows each class probability and the final decision; the nearest-trial view shows per-class angle distances.
 
 The MuJoCo hand panel mirrors measured physical joint angles for display. It does not generate training data or determine contact. Drag to rotate and scroll to zoom. Hardware and training jobs run in background threads so the Tk window can remain responsive. If offscreen MuJoCo rendering cannot start, the UI displays a preview-unavailable message while its other controls remain available.
@@ -276,7 +276,7 @@ The hand CAD files are in [Data/Leap_Model/](Data/Leap_Model/): `robot.urdf`, th
 | [Data/Proprioception/Physical_Only/](Data/Proprioception/Physical_Only/) | Named real-trial datasets, baseline/neural models, reports and saved inference runs | Physical-only terminal program and UI |
 | [Manuscript/](Manuscript/) | LaTeX research manuscript and build files | Research writing, separate from runtime code |
 
-Inside a physical dataset, `collection.json` is the planned classes, counts, ordered grip list, motor IDs, and offsets. `trials/<class>/<number>/` contains completed trial records. Terminal option **9** retakes a saved trial: it verifies the replacement before moving the original into `retaken/<class>/`, then retrains the nearest-trial model. During terminal collection, **R** after saving a trial retakes it immediately. Retrain the neural model with option **6** after any retake. `model.json` is the nearest-trial baseline. `neural_model.npz` and `neural_report.json` are the physical classifier and its held-out report. `runs/` holds nearest-trial recognition, while `neural_runs/` holds individual and combined neural recognition. The latest top-level `Data/Proprioception/log.csv` and `grasp_results.csv` are overwritten by the next trial; the copied trial and run folders preserve earlier measurements.
+Inside a physical dataset, `collection.json` is the planned classes, counts, ordered grip list, motor IDs, and offsets. `trials/<class>/<number>/` contains completed trial records. Terminal option **3** retakes a saved trial: it verifies the replacement before moving the original into `retaken/<class>/`, then retrains the nearest-trial model. During terminal collection, **R** after saving a trial retakes it immediately. Retrain the neural model with option **5** after any retake. `model.json` is the nearest-trial baseline. `neural_model.npz` and `neural_report.json` are the physical classifier and its held-out report. `runs/` holds nearest-trial recognition, while `neural_runs/` holds individual and combined neural recognition. The latest top-level `Data/Proprioception/log.csv` and `grasp_results.csv` are overwritten by the next trial; the copied trial and run folders preserve earlier measurements.
 
 Inside `Data/Proprioception/`, simulation training writes `simulation.csv` (one final pose per object/scale), `training_steps.csv` (viewer frames), `training_samples.csv` (original and noisy model inputs), `validation.csv`, `training_report.json`, and `model.npz`. Physical inference with that model writes `recognition_result.json`. Re-running simulation training replaces its generated model and CSVs, so copy an experiment elsewhere first if you need to preserve a previous run.
 

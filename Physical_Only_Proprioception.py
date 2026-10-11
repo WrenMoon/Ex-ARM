@@ -52,6 +52,24 @@ def predict(angles, samples):
                 distance_deg=distance(angles, nearest["angles_deg"]))
 
 
+def format_leave_one_out(model):
+    results = model.get("leave_one_out_results", [])
+    if not results:
+        return "Leave-one-out details are unavailable. Train with at least two trials per class."
+    lines = []
+    for class_name in model["classes"]:
+        trials = [result for result in results if result["class_name"] == class_name]
+        correct = sum(result["correct"] for result in trials)
+        lines.append(f"{class_name}: {correct}/{len(trials)} correct")
+        for result in trials:
+            outcome = "PASS" if result["correct"] else "FAIL"
+            lines.append(f"  Trial {result['trial']}: {outcome} -> "
+                         f"{result['predicted_class']} trial {result['nearest_trial']} "
+                         f"({result['distance_deg']:.1f} deg)")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def read_collection(name):
     path = dataset_folder(name) / "collection.json"
     plan = json.loads(path.read_text())
@@ -66,8 +84,13 @@ def read_collection(name):
         count = plan.get("trials_per_class")
         plan["trial_counts"] = {class_name: count for class_name in classes}
     counts = plan.get("trial_counts")
-    if not isinstance(counts, dict) or set(counts) != set(classes):
+    if not isinstance(counts, dict):
         raise ValueError("Invalid class trial counts in collection.json")
+    if set(counts) != set(classes):
+        missing = sorted(set(classes) - set(counts))
+        extra = sorted(set(counts) - set(classes))
+        raise ValueError(f"Class trial counts do not match classes: "
+                         f"missing {missing}, extra {extra}")
     if any(type(count) is not int or count < 1 for count in counts.values()):
         raise ValueError("Every class needs at least one trial")
     if plan["grip"] != Proprioception.grip:
@@ -153,12 +176,18 @@ def train_dataset(name):
     samples, classes, trial_counts = load_samples(name)
 
     correct = None
+    results = []
     if min(trial_counts.values()) > 1:
         correct = 0
         for index, sample in enumerate(samples):
             others = samples[:index] + samples[index + 1:]
             result = predict(sample["angles_deg"], others)
-            correct += result["class_name"] == sample["class_name"]
+            passed = result["class_name"] == sample["class_name"]
+            correct += passed
+            results.append(dict(class_name=sample["class_name"], trial=sample["trial"],
+                                predicted_class=result["class_name"],
+                                nearest_trial=result["nearest_trial"],
+                                distance_deg=result["distance_deg"], correct=passed))
 
     model = dict(format_version=1,
                  method="nearest physical trial, Euclidean distance in degrees",
@@ -169,7 +198,8 @@ def train_dataset(name):
                  classes=classes,
                  samples=samples,
                  leave_one_out_correct=correct,
-                 leave_one_out_total=len(samples) if correct is not None else 0)
+                 leave_one_out_total=len(samples) if correct is not None else 0,
+                 leave_one_out_results=results)
     folder = dataset_folder(name)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "model.json").write_text(json.dumps(model, indent=2) + "\n")
@@ -178,6 +208,7 @@ def train_dataset(name):
         print("Leave-one-trial-out requires at least two trials per class")
     else:
         print(f"Leave-one-trial-out: {correct}/{len(samples)} correct")
+        print(format_leave_one_out(model))
     return model
 
 
@@ -413,7 +444,7 @@ def collect_dataset(name):
     return train_dataset(name)
 
 
-def retake_trial(name, class_name, trial, hand=None):
+def retake_trial(name, class_name, trial, hand=None, on_angles=None, on_grip=None):
     plan = read_collection(name)
     class_name = class_name.strip().lower()
     if class_name not in plan["trial_counts"]:
@@ -434,10 +465,14 @@ def retake_trial(name, class_name, trial, hand=None):
             hand = open_hand()
         try:
             try:
-                grasp(hand)
+                grasp(hand, on_angles=on_angles, on_grip=on_grip)
                 save_grasp(replacement)
             finally:
                 release_hand(hand)
+                if on_angles is not None:
+                    on_angles(Proprioception.grip[0]["start_angles"])
+                if on_grip is not None:
+                    on_grip(1)
         finally:
             if own_hand:
                 hand.close()
@@ -451,7 +486,7 @@ def retake_trial(name, class_name, trial, hand=None):
     print(f"Retaken trial {trial} for {class_name}; previous trial saved at {saved}")
     if own_hand and not pending_trials(name):
         train_dataset(name)
-    print("Retrain the neural model with option 6 before using it again")
+    print("Retrain the neural model with option 5 before using it again")
     return folder
 
 
@@ -651,35 +686,26 @@ def ask_dataset_name(new=False):
 def main():
     while True:
         print("\nPhysical-only proprioception")
-        print("1. Collect or resume real grasps and train")
-        print("2. Train from saved physical trials")
-        print("3. Identify an object with the real hand")
-        print("4. Quit")
-        print("5. Add trials or classes to an existing dataset")
-        print("6. Train the physical-only neural model")
-        print("7. Identify an object with the neural model")
+        print("\nCOLLECT")
+        print("1. Create or resume a collection")
+        print("2. Add trials or classes")
+        print("3. Retake a saved trial")
+        print("\nTRAIN")
+        print("4. Train nearest-trial model and show leave-one-out results")
+        print("5. Train neural model")
+        print("\nRECOGNIZE")
+        print("6. Identify with nearest-trial model")
+        print("7. Identify with neural model")
+        print("\nOTHER")
         print("8. Launch presentation UI")
-        print("9. Retake a saved physical trial")
+        print("0. Quit")
         choice = input("Choose: ").strip()
         try:
             if choice == "1":
                 collect_dataset(ask_dataset_name(new=True))
             elif choice == "2":
-                train_dataset(ask_dataset_name())
-            elif choice == "3":
-                recognize(ask_dataset_name())
-            elif choice == "4":
-                break
-            elif choice == "5":
                 extend_dataset(ask_dataset_name())
-            elif choice == "6":
-                train_neural_dataset(ask_dataset_name())
-            elif choice == "7":
-                recognize_neural(ask_dataset_name())
-            elif choice == "8":
-                from Physical_Only_UI import main as launch_ui
-                launch_ui()
-            elif choice == "9":
+            elif choice == "3":
                 name = ask_dataset_name()
                 plan = read_collection(name)
                 print("Classes: " + ", ".join(
@@ -689,8 +715,21 @@ def main():
                 trial = int(input("Trial number to retake: "))
                 input("Place the object and press Enter to retake the trial: ")
                 retake_trial(name, class_name, trial)
+            elif choice == "4":
+                train_dataset(ask_dataset_name())
+            elif choice == "5":
+                train_neural_dataset(ask_dataset_name())
+            elif choice == "6":
+                recognize(ask_dataset_name())
+            elif choice == "7":
+                recognize_neural(ask_dataset_name())
+            elif choice == "8":
+                from Physical_Only_UI import main as launch_ui
+                launch_ui()
+            elif choice == "0":
+                break
             else:
-                print("Choose 1 through 9")
+                print("Choose 0 through 8")
         except (FileNotFoundError, FileExistsError, ValueError, RuntimeError,
                 ModuleNotFoundError) as error:
             print(error)
