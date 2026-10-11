@@ -7,12 +7,9 @@
     "bowl",
     "mug",
     "basic cylinder",
-    "hard drive",
-    "deodorant",
     "power bank",
     "megaminx",
     "xbox gamepad",
-    "ketchup bottle",
     "spectacles case",
     "mouse",
     "stapler",
@@ -20,10 +17,10 @@
     "laser pointer",
     "pyraminx",
     "tape measure",
-    "wrist watch",
     "tape",
     "scissors",
-    "spice bottle"
+    "spice bottle",
+    "no object"
   ],
   "trial_counts": {
     "water bottle": 5,
@@ -32,12 +29,9 @@
     "bowl": 5,
     "mug": 5,
     "basic cylinder": 5,
-    "hard drive": 5,
-    "deodorant": 5,
     "power bank": 5,
     "megaminx": 5,
     "xbox gamepad": 5,
-    "ketchup bottle": 5,
     "spectacles case": 5,
     "mouse": 5,
     "stapler": 5,
@@ -45,10 +39,10 @@
     "laser pointer": 5,
     "pyraminx": 5,
     "tape measure": 5,
-    "wrist watch": 5,
     "tape": 5,
     "scissors": 5,
-    "spice bottle": 5
+    "spice bottle": 5,
+    "no object": 5
   },
   "grip": [
     {
