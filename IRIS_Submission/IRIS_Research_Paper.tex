@@ -1,0 +1,231 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=0.88in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[hidelinks]{hyperref}
+\setstretch{1.13}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\renewcommand{\arraystretch}{1.12}
+
+\title{Physical-Only Proprioceptive Recognition of Fifteen Classes with a LEAP Hand}
+\author{G. Sai Pranav}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-1.2em}
+\begin{center}
+\small Category: Robotics and Intelligent Machines (ROBO)\\
+Guide: Harish J. Palanthandalam-Madapusi
+\end{center}
+
+\begin{abstract}
+People can often distinguish objects by how their fingers close around them. This study asks whether a robotic hand can make a limited version of that judgment using its own joint positions, without camera images or dedicated tactile arrays. A physical LEAP Hand with four fingers and 16 actuated joints performed the same sequence of three controlled grips on 14 household objects and an empty-hand condition. Motor-current thresholds stopped fingers on resistance, but recognition used only the 16 final joint angles from each grip, giving 48 measurements per trial. Five physical trials per label produced 75 trials across 15 labels.
+
+A small neural classifier was evaluated by three-fold within-dataset validation. Its highest-probability label was correct for 70 of 75 held-out trials (93.3\%). A decision rule accepted 67 trials as known classes, of which 65 were correct (97.0\% of accepted decisions); eight were uncertain. A nearest-trial method classified 69 of 75 correctly in a separate leave-one-trial-out evaluation. An exploratory 20-label extension, which contains the same 75 trials plus 25 more, gave 85 of 100 correct raw neural predictions. A further exploratory nearest-trial check found 72 of 75 correct using only the first grip, so the benefit of combining three grips is not established by these data.
+
+The findings show that repeatable physical grasp positions contain useful information about the enrolled items. The 15-label set was selected after preliminary analysis, and the validation folds also guided model training and decision thresholds. These are internal, post-selection estimates; performance across later sessions, new object instances, and genuinely unseen classes remains unmeasured.
+\end{abstract}
+
+\noindent\textbf{Keywords:} robotic hand; proprioception; active perception; object recognition; physical grasping; uncertainty
+
+\section{Introduction}
+
+Consider picking up a mug in the dark. Even without seeing it, the positions of the fingers after they close provide some information about what is being held. A robot hand also knows where its joints are, because those positions are needed to control its motors. Using internal joint state to perceive the external world is called \emph{proprioception}. This project studies whether that signal can help identify objects with a physical hand.
+
+The experimental platform is a LEAP Hand, an anthropomorphic robotic hand with four fingers and 16 independently actuated joints \cite{shaw2023}. For each candidate object, the hand makes three programmed closing motions. Each motion stops when a finger encounters resistance or reaches a target angle. The 16 final joint angles after each motion are saved. The resulting 48 numbers are a compact record of how the object constrained the hand.
+
+The central question is: \emph{Can these final joint positions distinguish common household objects under a repeatable physical grasp protocol?} The answer matters when a camera is blocked, lighting is poor, or dedicated tactile arrays are unavailable. The method does use the motors' position and current readings; ``physical-only'' means that the recognition models are trained on physical grasps and use joint angles as their features. It does not mean that the hand operates without internal sensors.
+
+The main experiment involves 14 objects and an empty-hand class, with five physical trials for each label. We compare a small neural classifier with a simple nearest-trial method, report both forced-choice predictions and decisions that withhold uncertain labels, and examine class-level errors. We also examine a 20-label extension using the same 75 trials plus 25 new trials, and perform a descriptive reanalysis of how much each of the three grips contributes to a nearest-trial decision. A separate simulation branch in the Ex-ARM software explores shape and size estimation; it is described to show the broader system but its results are kept separate from the physical experiment.
+
+\section{Background and research gap}
+
+The LEAP Hand was developed as an accessible platform for dexterous manipulation research \cite{shaw2023}. Its joint encoders make repeated position measurements available without mounting extra sensing material on the fingers. A controlled grasp turns an object's geometry, compliance, friction and placement into a pattern of stopping positions. That pattern is informative but not unique: two objects can stop the fingers at similar angles, and the same item can yield different angles if it is moved.
+
+Proprioceptive recognition itself is established research. V\'asquez and Perdereau \cite{vasquez2017} constructed shape signatures from robotic-hand joint angles and examined recognition across changes in size and pose. Sintov and Meir \cite{sintov2023} studied kinesthetic recognition from grasps without tactile arrays, including computational training and repeated observation. Kutsuzawa and colleagues \cite{kutsuzawa2024} examined learning-based estimation of shape and stiffness from multifingered grasp motion with confidence estimates. These studies motivate the present experiment but do not make its particular LEAP Hand protocol or dataset a first demonstration of proprioception.
+
+The narrower contribution here is a reproducible physical-hand pipeline: three fixed grip postures, a motor-current stopping rule, saved final-angle vectors, a class-only model trained on real measurements, an elementary comparison method, and an explicit option to abstain when the decision is weak. The research question is intentionally modest. It concerns recognition of enrolled physical exemplars in the recorded setup, not category-level recognition of all mugs or bottles, not object size estimation, and not reliable detection of objects never seen during training.
+
+\section{Experimental design}
+
+\subsection{Hand and three controlled grips}
+
+The hand has index, middle, ring and thumb fingers, each with four actuated joints. Joint angles are recorded in degrees in a fixed 16-joint order. Before each grip, the controller commands a specified starting posture. Active joints then advance by configured increments toward target angles. If a moving joint's signed motor-current reading exceeds its configured threshold, all four joints in that finger stop at their measured positions. Fingers that have not stopped continue to move. A finger also stops when its target angles are reached. The routine limits a grip to 250 control iterations, and a failed or incomplete grip is not treated as a successful trial.
+
+This motor-current test is a practical contact cue, not a calibrated force measurement. The current readings are retained in a time-series log to diagnose the motion, but they are \emph{not} inputs to either physical recognition method. After each grip, the controller reads the 16 final angles, retrying for up to ten seconds if a valid state is temporarily unavailable. The hand then moves to the next grip's starting posture. One completed trial contains three 16-angle vectors concatenated in order:
+\begin{equation}
+\mathbf q_i = [\mathbf q_i^{(1)},\mathbf q_i^{(2)},\mathbf q_i^{(3)}]\in\mathbb{R}^{48}.
+\end{equation}
+
+For a general reader, each vector is analogous to a record of where the fingers stopped around an object. The three grip programs use different target postures, giving three views of the same physical placement. The objects were placed near a consistent point relative to the palm, but the saved records do not include measured placement coordinates, object orientation, dimensions, mass or surface properties. Repeatability therefore depends on the collection procedure rather than on a measured placement correction.
+
+\begin{figure}[ht]
+\centering
+\fbox{\begin{minipage}{0.92\linewidth}\centering\small
+Place one object near the palm
+$\longrightarrow$ run grip 1, grip 2 and grip 3
+$\longrightarrow$ save 16 final angles after each grip\\[5pt]
+$\longrightarrow$ combine 48 angles
+$\longrightarrow$ neural class probabilities or nearest saved trial
+$\longrightarrow$ known class, uncertain or unknown
+\end{minipage}}
+\caption{Physical recognition workflow. Motor current controls when a finger stops; only final joint angles enter the recognition models.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Physical trial collection}
+
+The main dataset has 15 labels: water bottle, Rubik's cube, ball, bowl, mug, basic cylinder, power bank, spectacles case, mouse, stapler, pencil box, Pyraminx, tape measure, spice bottle and no object. The last label is an empty-hand control condition, leaving 14 physical objects. Five completed trials per label yield 75 physical records. Every record contains one 48-angle row and a time-series motor log. We audited the saved files and found 75 valid rows with 48 finite angles and 75 corresponding logs.
+
+The collection software saves a class-and-trial plan before recording starts, resumes after interruptions, checks whether a trial is complete before accepting it, and archives an earlier record when a trial is retaken. The model files also store the grip settings and a fingerprint of the physical samples; if settings or samples change, the neural model requires retraining. These measures support reproducibility of the saved analysis, although they do not make object placement experimentally controlled.
+
+The repository also contains an extended dataset with 20 labels and five trials per label. It adds Megaminx, Xbox gamepad, laser pointer, tape and scissors. All 75 main-study angle files occur unchanged in the extended dataset, and 25 additional physical trial files complete the 100-trial set. The 15-label class set was selected after preliminary analysis of recorded grasps. The extended set is reported as an exploratory scope check, not as an independent replication.
+
+\subsection{Nearest-trial comparison}
+
+The simplest model saves each labeled physical angle vector. For a test vector, it finds the saved vector with the smallest Euclidean distance in degrees and returns that record's class. In leave-one-trial-out evaluation, the test record is removed from the reference collection before the nearest neighbour is found. This method always returns an enrolled class and has no confidence score or unknown-object rule. It offers a transparent comparison for the neural classifier, but its evaluation and the neural evaluation use different training sets and selection steps.
+
+\section{Neural recognition method}
+
+\subsection{Input and model}
+
+Each final angle is normalized by the programmed start and target of its grip and joint:
+\begin{equation}
+x_{g,j}=\frac{q_{g,j}-a_{g,j}}{b_{g,j}-a_{g,j}},
+\end{equation}
+where $a_{g,j}$ and $b_{g,j}$ are the start and target angles. If they are equal, that input is set to zero. Normalization expresses progress through a programmed joint motion rather than the raw degree value. The model has 48 input units, one fully connected hidden layer of 24 tanh units and one softmax output per enrolled class. For 15 classes, it contains 1,551 trainable parameters. It predicts a class label, not size, shape dimensions, pose or grasp success.
+
+Training uses full-batch Adam with learning rate 0.01, weight decay 0.001 and a maximum of 500 epochs. To make the model less sensitive to small angle changes, each real training trial is accompanied by 20 synthetic noisy copies. Every copy receives independent Gaussian angle noise with standard deviation $0.5^\circ$, plus another $0.5^\circ$ Gaussian shift shared by the four joints of a finger within each grip. The untouched real trial remains in the training set. These copies are mathematical perturbations, not additional physical grasps. Inverse class-frequency weights are available so classes with different sample counts would not dominate training; the reported datasets happen to be balanced.
+
+\subsection{Internal validation and decision rule}
+
+For the neural report, real trials from each class are divided across three folds. In each round, one fold of real trials is held out before any noisy copies are generated; augmentation applies only to the training folds. The best epoch is chosen by cross-entropy on the held-out fold, with training stopped after 80 epochs without improvement. Once all folds are evaluated, the final saved model is fitted to all available real trials for the median number of selected epochs.
+
+The top-probability label is the \emph{raw} prediction. The software also has a decision rule that can withhold a label. It first measures the Euclidean distance between a normalized test vector and its nearest saved physical reference. A distance limit is set to 1.5 times the 95th percentile of held-out known-class distances. A test beyond that limit is called \emph{unknown}. Otherwise, a test is called \emph{uncertain} if its largest softmax probability is below 0.75 or the difference between the two largest probabilities is below 0.20. A temperature parameter for those probabilities is chosen from held-out logits. The reported ``accepted'' count includes only trials assigned a known class.
+
+The held-out folds influence epoch choice, probability temperature and distance threshold. For that reason, the reported fold scores are internal validation estimates, not the performance of a frozen procedure on an untouched test set. In particular, the distance rule was calibrated on known classes; an ``unknown'' output in a held-out known-class trial does not demonstrate successful detection of a truly novel object.
+
+The running software can request another complete three-grip trial when a decision is uncertain, up to three trials. It averages class probabilities across trials and combines nearest-reference distances by their median. The saved validation reports evaluated one three-grip sequence per physical trial, so they do not measure whether repeated sequences improve recognition.
+
+\section{Results}
+
+\subsection{Main 15-label physical study}
+
+The neural model's raw highest-probability prediction was correct for 70 of 75 held-out physical trials, or 93.3\%. The decision rule accepted 67 of 75 as known classes, and 65 of those 67 were correct. Thus accepted-decision accuracy was 97.0\% at 89.3\% coverage. The other eight trials were uncertain; none was marked unknown. The nearest-trial comparison correctly classified 69 of 75 in leave-one-trial-out evaluation. These numbers are summarized in Table~\ref{tab:summary}.
+
+\begin{table}[ht]
+\centering
+\caption{Internal physical results. The 15-label study is the main analysis. The 20-label extension contains the same 75 physical trials plus 25 new ones, so the rows are not independent experiments.}
+\label{tab:summary}
+\begin{tabular}{lcc}
+\toprule
+Measure & 15 labels & 20 labels \\
+\midrule
+Physical trials & 75 & 100 \\
+Raw neural correct & 70/75 (93.3\%) & 85/100 (85.0\%) \\
+Known-class decisions accepted & 67/75 (89.3\%) & 64/100 (64.0\%) \\
+Correct among accepted & 65/67 (97.0\%) & 61/64 (95.3\%) \\
+Uncertain decisions & 8 & 35 \\
+Unknown decisions on known trials & 0 & 1 \\
+Nearest-trial correct & 69/75 (92.0\%) & 88/100 (88.0\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For ten of the fifteen labels, all five raw neural predictions were correct. The five labels with one error each were water bottle (predicted mug), mug (ball), basic cylinder (Rubik's cube), power bank (spice bottle) and mouse (bowl). The empty-hand condition was correct in all five held-out trials. Because each label has five trials, macro-averaged recall equals raw accuracy at 93.3\%. A single error changes a particular label's measured recall by twenty percentage points, so class-level percentages should be read cautiously.
+
+The baseline's 69/75 and neural model's 70/75 are numerically close, but they cannot establish that one model is better. The baseline removes one saved trial at a time, while each neural fold withholds about one-third of real trials and uses those folds for training decisions. Neither score comes from a separate prospectively collected test session.
+
+\subsection{Twenty-label extension}
+
+The 20-label model was trained and evaluated on all 100 physical trials, including the unchanged 75 trials from the main study. Raw neural accuracy was 85/100. It accepted 64 known-class decisions, 61 correct, while 35 were uncertain and one known-class trial was called unknown. The nearest-trial method gave 88/100. Compared with the 15-label row, the broader model has more competing labels and a different fitted decision boundary and distance limit; the lower score and coverage should be interpreted as a descriptive change in this dataset rather than a measured causal effect of adding five classes.
+
+The extended confusion report shows two Xbox gamepad trials predicted as bowl, two laser pointer trials predicted as scissors, and two tape trials predicted as laser pointer. These are examples of overlap in this measurement space, not proof that the objects have identical shape. Placement, contact, friction and motor response were not separately measured, so the physical cause of each confusion cannot be assigned from the saved angle files alone.
+
+\subsection{Exploratory grip contribution}
+
+To see whether all three grips were useful to the simple comparison method, we repeated nearest-trial leave-one-out classification using each 16-angle grip alone and selected combinations of grips. This calculation uses the same saved trials and raw-degree distance rule; no new physical measurements were collected. Table~\ref{tab:grips} reports the result.
+
+\begin{table}[ht]
+\centering
+\caption{Exploratory nearest-trial reanalysis of saved physical grasps. Subsets use the listed grips' final angles, without retraining the neural network.}
+\label{tab:grips}
+\begin{tabular}{lcc}
+\toprule
+Angles used & 15 labels, correct/75 & 20 labels, correct/100 \\
+\midrule
+Grip 1 only & 72 & 87 \\
+Grip 2 only & 65 & 80 \\
+Grip 3 only & 66 & 79 \\
+Grips 1 and 2 & 67 & 87 \\
+Grips 1 and 3 & 71 & 89 \\
+Grips 2 and 3 & 69 & 86 \\
+All three grips & 69 & 88 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the main set, grip 1 alone obtained 72/75, whereas all three obtained 69/75. On the extended set, grips 1 and 3 obtained 89/100 and all three 88/100. These exploratory comparisons do not prove that fewer grips are generally better: feature dimensions, Euclidean distance weighting and the class set all change across rows, and subsets were examined after seeing the data. They do show that this dataset does not demonstrate a benefit from simply concatenating more grip angles. A future study should choose a grip policy using development data, freeze it, and compare it on later independent trials.
+
+\subsection{Separate simulation branch}
+
+Ex-ARM also contains a simulation-trained class-and-size path. It imports STEP models of a cube, sphere and cylinder, places each as a fixed mesh in a MuJoCo hand scene \cite{todorov2012}, and advances the programmed grip until collision with a finger or an angle target. It generated 21 scales per shape, from 50\% to 150\% of a reference size in 5\% increments, giving 63 simulated grasps. Every fifth size in the sweep was held out, for 15 validation scenes. A separate 32-hidden-unit model gave 13/15 correct raw class predictions and a 1.02 mm mean absolute size error on those held-out \emph{simulated} sizes. Its rejection checks accepted only 3/15, all correctly classified.
+
+That branch is useful for exploring scale variation and the software pipeline, but it is not evidence of real-hand size accuracy. The simulator stops a finger on idealized collision; the physical controller stops after a motor-current threshold is crossed. Contact compliance, friction, controller timing and calibration can move the physical stop angle. The saved repository does not include a matched physical test of this simulation-trained model, so the paper does not combine its 13/15 score with the 15-label physical result.
+
+\section{Discussion}
+
+\subsection{What the physical result supports}
+
+The principal observation is that a small set of final joint angles carries considerable class information under the recorded placement and hardware conditions. The hand classified 70 of 75 held-out trials by its raw neural choice, and a simpler nearest-trial method produced a similar internal score. A controlled closing motion can therefore act as a form of active sensing: the hand deliberately moves, then reads its own configuration. The result does not require an external image or a tactile array as a model feature.
+
+The uncertainty rule is useful as an interface behavior because it avoids naming some low-confidence trials. In the main data it withheld eight decisions, leaving 65 correct among 67 accepted. That 97.0\% is conditional on acceptance and must be reported together with the 67/75 coverage. It is not a claim that the system recognizes 97\% of all future objects. Moreover, temperature and distance calibration used the same internal folds, making the accepted proportion and accepted correctness potentially optimistic on new data.
+
+The exploratory analyses also caution against an intuitive claim that more grips necessarily improve performance. Grip 1 alone outperformed the concatenated three-grip nearest-trial vector on the selected 15-label set. More measurements can make a simple Euclidean rule worse if the extra dimensions add noise or emphasize joints that vary with placement. This is a hypothesis for later testing, not an established explanation. The neural model's contribution of each grip was not separately evaluated in the saved reports.
+
+\subsection{Limits of the experiment}
+
+First, the 15-label set was selected after preliminary inspection. The 70/75 result is therefore a post-selection description of this dataset, not a prospectively fixed benchmark. The 20-label extension gives a useful view of the broader available set, but it shares the first 75 physical trials and does not cure this selection issue.
+
+Second, there are only five trials per label, all apparently collected with the same physical exemplar and without logged placement offsets, orientation, session identifier, object dimensions or environmental conditions. The method may learn a particular item's response at a particular palm position. It cannot yet be said to recognize other instances of that object category, a changed placement, or a later session. Angle perturbations during training do not substitute for those independent physical variations.
+
+Third, validation folds were used both to score predictions and to select training duration and decision settings. A rigorous final estimate would reserve a later data collection session untouched during all model development. The nearest-trial and neural scores use different evaluation designs, so the one-trial numerical difference should not be interpreted as a controlled model comparison.
+
+Fourth, the distance threshold was derived from known classes. No held-out novel-object classes were recorded for testing unknown rejection. The zero unknown decisions in the main study say nothing about whether a truly unfamiliar object would be rejected. The one unknown decision in the 20-label report was a false rejection of a known-class trial, not a successful novel-object detection.
+
+Finally, motor current is an indirect and hardware-dependent cue for resistance. The software logs currents but does not measure contact force or surface pressure. Differences in current calibration, power supply, object compliance and friction could alter the final angles. The present results are specific to this hand, controller and protocol until those factors are tested.
+
+\subsection{Next experiment}
+
+A stronger follow-up would fix the class set, grip policy, normalization, model architecture and decision thresholds before collecting new data. It should record object instance, placement offset, orientation and session date, then reserve entire later sessions as the final test. A second exemplar of each class would test whether the model learned category information rather than a single item. Additional objects never included in training would test unknown rejection. For a fair comparison of one versus three grips, the grip subset should be chosen on development data and evaluated on the untouched session with matched decision rules. Repeated full sequences should likewise be tested explicitly before claiming that an uncertain decision improves after a second grasp.
+
+\section{Conclusion}
+
+Using a physical LEAP Hand, this project shows that final joint positions after controlled grasps can distinguish many enrolled household items under recorded conditions. The main 15-label analysis obtained 70/75 correct raw neural predictions, with 65/67 correct among accepted decisions; a separate nearest-trial evaluation obtained 69/75. The extended 20-label data and exploratory grip analysis make the limits clearer: wider class coverage reduced internal neural accuracy, and three concatenated grips did not improve the simple nearest-trial score over grip 1 alone. These are informative internal results, while generalization across sessions, physical exemplars and unseen classes remains an open question.
+
+\section*{Acknowledgement}
+I thank Harish J. Palanthandalam-Madapusi, the project's single guide, for research guidance and technical feedback.
+
+\begin{thebibliography}{9}
+\bibitem{shaw2023} K. Shaw, A. Agarwal and D. Pathak, ``LEAP Hand: Low-Cost, Efficient, and Anthropomorphic Hand for Robot Learning,'' arXiv:2309.06440, 2023. \url{https://doi.org/10.48550/arXiv.2309.06440}.
+\bibitem{vasquez2017} A. V\'asquez and V. Perdereau, ``Proprioceptive shape signatures for object manipulation and recognition purposes in a robotic hand,'' \emph{Robotics and Autonomous Systems}, vol. 98, pp. 135--146, 2017. \url{https://doi.org/10.1016/j.robot.2017.06.001}.
+\bibitem{sintov2023} A. Sintov and I. Meir, ``Simple kinesthetic haptics for object recognition,'' \emph{The International Journal of Robotics Research}, vol. 42, no. 7, pp. 537--561, 2023. \url{https://doi.org/10.1177/02783649231182486}.
+\bibitem{kutsuzawa2024} K. Kutsuzawa, M. Matsumoto, D. Owaki and M. Hayashibe, ``Learning-based object's stiffness and shape estimation with confidence level in multi-fingered hand grasping,'' \emph{Frontiers in Neurorobotics}, vol. 18, article 1466630, 2024. \url{https://doi.org/10.3389/fnbot.2024.1466630}.
+\bibitem{todorov2012} E. Todorov, T. Erez and Y. Tassa, ``MuJoCo: A Physics Engine for Model-Based Control,'' in \emph{2012 IEEE/RSJ International Conference on Intelligent Robots and Systems}, pp. 5026--5033, 2012. \url{https://doi.org/10.1109/IROS.2012.6386109}.
+\end{thebibliography}
+
+\appendix
+\section{Reproducibility notes}
+
+The repository's physical-only data folder contains datasets named \emph{Common Household Objects} and \emph{Household Objects\_Extended}. Each class has five trial folders with a final-angle CSV and a motor log. The saved model and neural report contain the internal results. The grip-subset calculation in this submission reads the saved model vectors. The repository also provides the three grip settings, physical controller, neural training code and collection interface needed to reproduce the analysis. The source and data are available at \url{https://github.com/WrenMoon/Ex-ARM}.
+
+\end{document}
