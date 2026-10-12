@@ -4,17 +4,24 @@
   \def\url#1{\texttt{#1}}\fi
 \expandafter\ifx\csname urlprefix\endcsname\relax\def\urlprefix{URL }\fi
 
-\bibitem[{Kutsuzawa et~al.(2024)Kutsuzawa, Matsumoto, Owaki, and Hayashibe}]{Kutsuzawa2024}
-Kutsuzawa, K., Matsumoto, M., Owaki, D., Hayashibe, M., 2024. Learning-based object's stiffness and shape estimation with confidence level in multi-fingered hand grasping. Frontiers in Neurorobotics 18, 1466630.
+\bibitem[{Kutsuzawa et~al.(2024)Kutsuzawa, Matsumoto, Owaki, and
+  Hayashibe}]{Kutsuzawa2024}
+Kutsuzawa, K., Matsumoto, M., Owaki, D., Hayashibe, M., 2024. Learning-based
+  object's stiffness and shape estimation with confidence level in
+  multi-fingered hand grasping. Frontiers in Neurorobotics 18, 1466630.
 
 \bibitem[{Shaw et~al.(2023)Shaw, Agarwal, and Pathak}]{ShawAgarwalPathak2023}
-Shaw, K., Agarwal, A., Pathak, D., 2023. Leap hand: Low-cost, efficient, and anthropomorphic hand for robot learning.
+Shaw, K., Agarwal, A., Pathak, D., 2023. Leap hand: Low-cost, efficient, and
+  anthropomorphic hand for robot learning.
 \newline\urlprefix\url{https://arxiv.org/abs/2309.06440}
 
 \bibitem[{Sintov and Meir(2023)}]{SintovMeir2023}
-Sintov, A., Meir, I., 2023. Simple kinesthetic haptics for object recognition. The International Journal of Robotics Research 42~(7), 537--561.
+Sintov, A., Meir, I., 2023. Simple kinesthetic haptics for object recognition.
+  The International Journal of Robotics Research 42~(7), 537--561.
 
 \bibitem[{V{\'a}squez and Perdereau(2017)}]{VasquezPerdereau2017}
-V{\'a}squez, A., Perdereau, V., 2017. Proprioceptive shape signatures for object manipulation and recognition purposes in a robotic hand. Robotics and Autonomous Systems 98, 135--146.
+V{\'a}squez, A., Perdereau, V., 2017. Proprioceptive shape signatures for
+  object manipulation and recognition purposes in a robotic hand. Robotics and
+  Autonomous Systems 98, 135--146.
 
 \end{thebibliography}

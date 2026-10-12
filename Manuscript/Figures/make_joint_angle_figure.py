@@ -30,16 +30,12 @@ def trials_for(name):
     return trials
 
 
-def draw_panel(pdf, angles, label, color, grip, x, y, width, height, ymin, ymax):
-    left, right, bottom, top = 29, 7, 23, 18
+def draw_panel(pdf, angles, color, grip, x, y, width, height, ymin, ymax):
+    left, right, bottom, top = 29, 7, 20, 18
     px, py = x + left, y + bottom
     pw, ph = width - left - right, height - bottom - top
 
-    pdf.setFont("Helvetica-Bold", 9)
-    pdf.setFillColor(color)
-    pdf.drawCentredString(x + width / 2, y + height - 10, label)
-
-    pdf.setFont("Helvetica", 6.5)
+    pdf.setFont("Helvetica", 8)
     for value in range(ymin, ymax + 1, 40):
         yy = py + ph * (value - ymin) / (ymax - ymin)
         pdf.setStrokeColor(HexColor("#E1E4E8"))
@@ -93,20 +89,19 @@ def draw_panel(pdf, angles, label, color, grip, x, y, width, height, ymin, ymax)
 
 def main():
     series = {name: trials_for(name) for name, _, _ in OBJECTS}
-    page_width, page_height = 7.25 * inch, 6.5 * inch
+    page_width, page_height = 7.25 * inch, 5.8 * inch
     pdf = canvas.Canvas(str(OUTPUT), pagesize=(page_width, page_height))
     pdf.setTitle("Final joint angles for water bottle and mug physical trials")
     pdf.setAuthor("Ex-ARM physical-only proprioception study")
 
-    pdf.setFillColor(HexColor("#243746"))
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(26, page_height - 21, "Measured final joint angles across three grips")
-    pdf.setFont("Helvetica", 7.4)
-    pdf.drawString(26, page_height - 34, "Thin lines: five physical trials    Thick line and dots: class mean")
+    panel_width, panel_height = 3.18 * inch, 1.625 * inch
+    left_x, right_x = 42, page_width - panel_width - 10
+    top_y = page_height - 27
+    pdf.setFont("Helvetica-Bold", 10)
+    for x, (_, label, color) in zip((left_x, right_x), OBJECTS):
+        pdf.setFillColor(color)
+        pdf.drawCentredString(x + panel_width / 2, page_height - 16, label)
 
-    panel_width, panel_height = 3.40 * inch, 1.67 * inch
-    left_x, right_x = 19, page_width - panel_width - 10
-    top_y = page_height - 48
     for grip in range(3):
         values = [trial[grip * 16 + index]
                   for name, _, _ in OBJECTS for trial in series[name] for index in range(16)]
@@ -114,18 +109,26 @@ def main():
         ymax = int((max(values) + 39) // 40 * 40)
         if ymax <= ymin:
             ymax = ymin + 40
-        y = top_y - (grip + 1) * panel_height - grip * 1.5
-        for x, (name, label, color) in zip((left_x, right_x), OBJECTS):
-            draw_panel(pdf, series[name], label, color, grip, x, y,
+        y = top_y - (grip + 1) * panel_height - grip * 2
+        for x, (name, _, color) in zip((left_x, right_x), OBJECTS):
+            draw_panel(pdf, series[name], color, grip, x, y,
                        panel_width, panel_height, ymin, ymax)
         pdf.setFillColor(HexColor("#243746"))
-        pdf.setFont("Helvetica-Bold", 7.5)
-        pdf.drawString(19, y + panel_height - 1, f"Grip {grip + 1}")
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(left_x, y + panel_height - 7, f"Grip {grip + 1}")
 
-    pdf.setFont("Helvetica", 7)
+        pdf.saveState()
+        pdf.translate(22, y + 20 + (panel_height - 38) / 2)
+        pdf.rotate(90)
+        pdf.setFont("Helvetica", 8.5)
+        pdf.setFillColor(HexColor("#4C5964"))
+        pdf.drawCentredString(0, 0, "Final angle (degrees)")
+        pdf.restoreState()
+
+    pdf.setFont("Helvetica", 8.5)
     pdf.setFillColor(HexColor("#4C5964"))
-    pdf.drawCentredString(page_width / 2, 18, "Joint index within grip (0–15); dashed lines separate fingers")
-    pdf.drawCentredString(page_width / 2, 8, "Vertical axis: final angle (degrees); connected points are distinct joints, not time steps")
+    for x in (left_x, right_x):
+        pdf.drawCentredString(x + panel_width / 2, 14, "Joint index within grip")
     pdf.save()
     print(OUTPUT)
 
