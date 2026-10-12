@@ -2,37 +2,22 @@
 
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{float}
+\usepackage{graphicx}
 \usepackage{hyperref}
 
 \begin{document}
 
 \begin{frontmatter}
 
-\title{Physical-Only Proprioceptive Recognition of Fifteen Classes
-with a LEAP Hand}
+\title{Grasp to Identify: Physical-Only Proprioceptive Recognition
+of Fifteen Classes with a LEAP Hand}
 
 \author{G.~Sai~Pranav}
 \author{Harish J.~Palanthandalam-Madapusi}
 
 \begin{abstract}
-Robotic hands commonly use vision or dedicated tactile sensors to
-recognize objects. Using 15 household objects, this study tests whether a physical LEAP Hand
-can distinguish between objects using only the joint angles reached
-after controlled grasps. 
-Motor-current thresholds stop an entire
-finger when resistance is detected. 
-Three sequential grips on the object provide
-48 final angles per trial to a 24-unit hidden-layer classifier.
-The dataset contains five physical trials for each of 15 labels,
-comprising 14 objects and an empty-hand condition. In three-fold
-within-dataset validation, the neural network classified 70 of
-75 held-out trials correctly. Its decision rule accepted 67
-trials as known classes, of which 65 were correct. A nearest-trial
-baseline obtained 69 of 75 correct in leave-one-trial-out
-evaluation. The class set was selected after preliminary
-analysis, so these results are internal, post-selection estimates.
-They do not measure generalization to a new session, object
-instance, or unseen class.
+Robotic hands commonly rely on vision or dedicated tactile sensors for object recognition. This study investigates whether the final joint configurations of a physical LEAP Hand can distinguish enrolled objects using proprioceptive information alone. The approach exploits differences in finger positions produced when objects interrupt controlled grasping movements. A hand with 16 actuated joints executes three programmed grips with each object positioned near a consistent palm location. Motor currents indicate resistance: when a joint exceeds its configured threshold, all four joints of that finger stop while the remaining fingers continue. The final joint angles from the three grips form a 48-dimensional feature vector; motor currents are used for control but excluded from recognition inputs. Normalised angles are fed into a neural classifier with a single hidden layer of 24 units. The dataset comprises 75 physical trials, with five trials for each of 14 objects and an empty-hand condition. Gaussian perturbations augment training data after the physical trials are divided into validation folds. In three-fold within-dataset validation, the classifier correctly identified 70 of 75 held-out trials \(93.3\%\). A decision rule combining class probabilities and distance to recorded grasps accepted 67 trials as known classes, of which 65 were correct \(97.0\%\); eight were uncertain, and none were rejected as unknown. These findings indicate that final grasp angles contain information sufficient to distinguish many enrolled items under controlled conditions. 
 \end{abstract}
 
 
@@ -83,6 +68,8 @@ nearest-trial comparison method, and an interface for running the
 hand and viewing the results. Both models use only physical grasp
 measurements for training and recognition.
 
+Figure~\ref{fig:grasp} shows the physical hand during a bottle grasp.
+
 \section{Experimental Setup and Methodology}
 \label{sec:methods}
 
@@ -97,6 +84,15 @@ and every object receives the same programmed grip sequence.
 The saved trial files do not record measured placement offsets or
 object orientation. Placement is therefore a condition of the
 collection procedure rather than a property inferred by the model.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\linewidth]{Figures/hand_grasping_bottle.jpg}
+\caption{The physical LEAP Hand grasping the water bottle used in
+the study. The fingers contact the object while the hand closes
+under motor-current stopping rules.}
+\label{fig:grasp}
+\end{figure}
 
 For each configured grip, the hand moves to that grip's starting
 posture. Its 16 joints then advance toward specified targets using
@@ -151,6 +147,16 @@ final angles, and time-series motor log; they do not contain
 measured object dimensions or placement coordinates. The
 analyzed class set was selected after preliminary analysis
 of recorded grasps rather than fixed before data collection.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{Figures/study_objects.jpg}
+\caption{The 14 physical items represented in the 15-label study.
+The remaining label, \emph{no object}, is an empty-hand grasp and
+therefore does not appear in the photograph. Each item was grasped
+in five physical trials.}
+\label{fig:objects}
+\end{figure}
 
 \subsection{Neural network and training}
 \label{sec:model}
@@ -230,10 +236,10 @@ decision.
 \subsection{Software implementation}
 \label{sec:software}
 
-The grip and physical-only training programs are part
-of Ex-ARM \citep{ExARM}. The terminal interface can
-collect, resume, extend, and retake physical trials,
-train either model, and run the hand for recognition.
+The grip and training programs are written in python.
+ The terminal interface collects,
+resumes, extends, and retakes physical trials. It also
+trains both models and runs the hand for recognition.
 The presentation window evaluates both trained models
 from the same recognition grasp. It shows both decisions,
 the neural probabilities or nearest-trial distances,
@@ -257,7 +263,7 @@ return \emph{uncertain} or \emph{unknown}. The accepted
 count includes only decisions assigned an enrolled class.
 The results are summarized in Table~\ref{tab:results}.
 
-\begin{table}[t]
+\begin{table}[h]
 \centering
 \caption{Internal validation of the 15-class physical dataset.
 Accepted correct is conditioned on a known-class decision.
@@ -290,7 +296,7 @@ remaining labels each had one error. Because all labels
 have five trials, macro-averaged recall equals raw
 accuracy at 93.3\%.
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \caption{Raw held-out neural predictions in the 15-class
 study. The table reports the highest-probability label
@@ -329,21 +335,47 @@ describe different internal evaluations; their small
 numerical difference is not a controlled comparison
 on a separate test set.
 
+\subsection{Measured joint-angle profiles}
+\label{sec:profiles}
+
+Figure~\ref{fig:angles} presents the final angle of every joint in
+each of the three grips for the water bottle and mug. The thin traces
+are the five recorded trials for each label, and the heavy traces are
+their per-joint means. These two enrolled items were chosen because
+their profiles are visually similar and the held-out neural model
+confused one water-bottle trial with a mug. Across the 48
+coordinates, the mean absolute difference between the two class
+means is \(1.76^\circ\); the largest single-coordinate difference is
+\(9.9^\circ\). These figures were calculated from physical
+trials.
+
+This plot shows that a single angle threshold is unlikely to describe
+the entire object, many joints reach almost identical
+angles for both items, while smaller differences are spread over
+several fingers.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{Figures/joint_angles_bottle_mug.pdf}
+\caption{Measured final joint angles for water bottle (left) and
+mug (right), with all 16 joints shown for each of three grips.
+Each thin line is one physical trial (five per item); the darker
+line is the mean. The horizontal axis indexes distinct joints,
+not time, and dashed lines divide the four fingers. Each row uses
+the same vertical scale for both objects.}
+\label{fig:angles}
+\end{figure}
+
 \subsection{Interpretation and limitations}
 \label{sec:discussion}
 
 The internal results support the presence of class information
 in the final joint configuration. They do not establish
-performance on another recording day, a different exemplar
+performance on a different exemplar
 of a named object, or an object absent from training.
-No separate novel-object
-rejection experiment is recorded in these reports.
 
 The 15-class set was selected after preliminary analysis
-of the recorded grasps. Its validation score is therefore
-a within-dataset, post-selection estimate rather than an
-independent test of a prospectively fixed class set.
-Likewise, the probability temperature and distance
+of the recorded grasps, the probability temperature and distance
 threshold were chosen from the held-out folds. Accepted
 accuracy on those folds may be optimistic for new data.
 Only five trials are available for each label; a single
@@ -356,6 +388,9 @@ produce similar angles at the same palm location. Gaussian
 angle perturbations do not create independent physical
 grasps and cannot reproduce every change in placement,
 friction, compliance, or motor-current response. The
+near-overlap of the water-bottle and mug profiles in
+Figure~\ref{fig:angles} illustrates this ambiguity within the
+enrolled set. The
 software permits up to three grip sequences for an
 uncertain recognition and averages neural probabilities,
 but the saved validation reports evaluate individual
@@ -366,8 +401,8 @@ in later sessions, include new object instances, and
 reserve some entire object classes to measure unknown
 rejection.
 
-\section{Conclusion}
-\label{sec:conclusion}
+\section{Conclusions}
+\label{sec:conclusions}
 
 This work demonstrates physical-only proprioceptive
 recognition with a LEAP Hand using three sequential
@@ -381,7 +416,7 @@ that final grasp angles distinguish many enrolled items
 under the recorded conditions. Independent sessions,
 new physical instances, unseen objects, and the effect
 of repeat grasps remain to be tested.
-
+\clearpage
 \bibliographystyle{elsart-harv}
 \bibliography{manuscript}
 
