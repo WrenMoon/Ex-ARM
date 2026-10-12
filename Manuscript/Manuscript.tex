@@ -268,10 +268,10 @@ The results are summarized in Table~\ref{tab:results}.
 \caption{Internal validation of the 15-class physical dataset.
 Accepted correct is conditioned on a known-class decision.
 The nearest-trial method uses leave-one-trial-out evaluation
-rather than the neural network's three folds.}
+rather than the neural network's three folds. \\}
 \label{tab:results}
 \small
-\begin{tabular}{lc}
+\begin{tabular}{|l|c|}
 \hline
 Measure & 15 classes \\
 \hline
@@ -300,28 +300,28 @@ accuracy at 93.3\%.
 \centering
 \caption{Raw held-out neural predictions in the 15-class
 study. The table reports the highest-probability label
-before the uncertainty rule is applied.}
+before the uncertainty rule is applied. \\}
 \label{tab:perclass}
 \small
-\begin{tabular}{lcl}
+\begin{tabular}{|c|l|c|l|}
 \hline
-True label & Correct & Incorrect prediction \\
+S.No. & True label & Correct & Incorrect prediction \\
 \hline
-Water bottle & 4/5 & Mug \\
-Rubik's cube & 5/5 & --- \\
-Ball & 5/5 & --- \\
-Bowl & 5/5 & --- \\
-Mug & 4/5 & Ball \\
-Basic cylinder & 4/5 & Rubik's cube \\
-Power bank & 4/5 & Spice bottle \\
-Spectacles case & 5/5 & --- \\
-Mouse & 4/5 & Bowl \\
-Stapler & 5/5 & --- \\
-Pencil box & 5/5 & --- \\
-Pyraminx & 5/5 & --- \\
-Tape measure & 5/5 & --- \\
-Spice bottle & 5/5 & --- \\
-No object & 5/5 & --- \\
+1 & Water bottle & 4/5 & Mug \\
+2 & Rubik's cube & 5/5 & --- \\
+3 & Ball & 5/5 & --- \\
+4 & Bowl & 5/5 & --- \\
+5 & Mug & 4/5 & Ball \\
+6 & Basic cylinder & 4/5 & Rubik's cube \\
+7 & Power bank & 4/5 & Spice bottle \\
+8 & Spectacles case & 5/5 & --- \\
+9 & Mouse & 4/5 & Bowl \\
+10 & Stapler & 5/5 & --- \\
+11 & Pencil box & 5/5 & --- \\
+12 & Pyraminx & 5/5 & --- \\
+13 & Tape measure & 5/5 & --- \\
+14 & Spice bottle & 5/5 & --- \\
+15 & No object & 5/5 & --- \\
 \hline
 \end{tabular}
 \end{table}

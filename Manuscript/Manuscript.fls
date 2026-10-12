@@ -1,7 +1,7 @@
 PWD /Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript
 INPUT /usr/local/texlive/2025/texmf-var/web2c/luahbtex/lualatex.fmt
-INPUT /Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/Manuscript.tex
-OUTPUT Manuscript.log
+INPUT /Users/saipranavgandhi/Programming/Leap Hand/Ex-ARM-main/Manuscript/manuscript.tex
+OUTPUT manuscript.log
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/tex-ini-files/lualatexquotejobname.lua
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/base/ltluatex.lua
 INPUT /usr/local/texlive/2025/texmf-dist/tex/luatex/luaotfload/luaotfload-main.lua
@@ -76,9 +76,9 @@ INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/psnfss/upzd.fd
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/adobe/zapfding/pzdr.tfm
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/psnfss/upsy.fd
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/adobe/symbol/psyr.tfm
-INPUT ./Manuscript.spl
+INPUT ./manuscript.spl
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/natbib/natbib.sty
-OUTPUT Manuscript.spl
+OUTPUT manuscript.spl
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/amsmath/amsmath.sty
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/amsmath/amstext.sty
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/amsmath/amsgen.sty
@@ -116,16 +116,16 @@ INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck
 INPUT /usr/local/texlive/2025/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/l3backend/l3backend-luatex.def
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/l3backend/l3backend-luatex.lua
-INPUT ./Manuscript.aux
-OUTPUT Manuscript.aux
+INPUT ./manuscript.aux
+OUTPUT manuscript.aux
 INPUT /usr/local/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 INPUT /usr/local/texlive/2025/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
-INPUT ./Manuscript.out
-INPUT ./Manuscript.out
-OUTPUT Manuscript.pdf
-INPUT ./Manuscript.out
-OUTPUT Manuscript.out
+INPUT ./manuscript.out
+INPUT ./manuscript.out
+OUTPUT manuscript.pdf
+INPUT ./manuscript.out
+OUTPUT manuscript.out
 INPUT /Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmroman12-bold.luc
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmr12.tfm
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmr8.tfm
@@ -169,10 +169,10 @@ INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam1
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
 INPUT ./Figures/joint_angles_bottle_mug.pdf
 INPUT ./Figures/joint_angles_bottle_mug.pdf
-INPUT ./Manuscript.bbl
+INPUT ./manuscript.bbl
 INPUT /Users/saipranavgandhi/Library/texlive/2025/texmf-var/luatex-cache/generic/fonts/otl/lmmono12-regular.luc
-INPUT ./Manuscript.aux
-INPUT ./Manuscript.out
+INPUT ./manuscript.aux
+INPUT ./manuscript.out
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
 INPUT /usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb
