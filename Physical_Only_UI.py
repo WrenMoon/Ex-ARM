@@ -725,22 +725,21 @@ class HandView(tk.Canvas):
         self.zoom_factor = max(1, math.ceil(max(width, height) / self.MAX_RENDER))
         width, height = width // self.zoom_factor, height // self.zoom_factor
         if self.ready and (width, height) != self.size:
+            # MuJoCo frees OpenGL resources when a renderer closes. Dispose of
+            # the old context before creating the replacement on resize.
+            old, self.renderer, self.size = self.renderer, None, None
             try:
+                if old is not None:
+                    old.close()
                 renderer = self.mujoco.Renderer(self.model, height=height, width=width)
-                old, self.renderer, self.size = self.renderer, renderer, (width, height)
+                self.renderer, self.size = renderer, (width, height)
                 top, bottom = self.np.array([20, 29, 52]), self.np.array([10, 15, 28])
                 shade = self.np.linspace(0, 1, height)[:, None, None]
                 self.backdrop = self.np.broadcast_to(top + (bottom - top) * shade,
                                                      (height, width, 3)).astype(self.np.uint8)
-                if old is not None:
-                    try:
-                        old.close()
-                    except Exception:
-                        pass
+                self.error = None
             except Exception as error:
                 self.error = str(error)
-                if self.renderer is None:
-                    self.ready = False
         self.draw()
 
     def set_pose(self, angles):
