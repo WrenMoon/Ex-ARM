@@ -1,0 +1,112 @@
+\documentclass[authoryear,11pt]{elsarticle}
+
+\usepackage{hyperref}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Grasp to Identify: Physical-Only Proprioceptive Recognition
+of Fifteen Classes with a LEAP Hand}
+
+\author{G.~Sai~Pranav}
+\author{Harish J.~Palanthandalam-Madapusi}
+
+\begin{abstract}
+Robotic hands commonly use vision or dedicated tactile sensors to recognise objects. Using 15 household objects, this study tests whether a physical LEAP Hand can distinguish among objects based solely on the joint angles achieved during controlled grasps.  Motor-current thresholds stop an entire finger when resistance is detected.  Three sequential grips on the object provide 48 final angles per trial to a 24-unit hidden-layer classifier. The dataset contains five physical trials for each of 15 labels, comprising 14 objects and an empty-hand condition. In three-fold within-dataset validation, the neural network correctly classified 70 of 75 held-out trials. The decision rule accepted 67 trials as known classes, of which 65 were correct. A nearest-trial baseline obtained 69/75 correct in a leave-one-trial-out evaluation. The class set was selected after preliminary analysis, so these results are internal, post-selection estimates. They do not measure generalisation to a new session, object instance, or unseen class.\end{abstract}
+
+\begin{keyword}
+proprioception \sep LEAP Hand \sep household object recognition
+\sep physical grasping \sep neural network
+\end{keyword}
+
+\end{frontmatter}
+
+\noindent\textbf{Category:} Robotics \& Intelligent Machines
+
+\section{Introduction and Objectives}
+
+A robot can learn about an object through contact, even when a camera
+cannot see the contact surfaces. Earlier research has used joint
+positions and kinesthetic grasp information for object recognition \citep{Sintov2023, Vasquez2017}
+but this project asks a narrower, practical question: are the final
+angles after a short, repeatable sequence of physical LEAP Hand grips
+enough to distinguish a set of household items? The objective is to
+build and evaluate a working physical-only recognizer that uses the
+hand's existing joint-position readings. A second objective is to
+compare a compact neural classifier with a nearest-recorded-trial
+method. The study treats an empty-hand grasp as a class. It predicts
+a trained label, not the object's dimensions or un-trained object's identity.
+
+\section{Innovation}
+
+The experiment combines three deliberately different grips,
+finger-level stopping on motor-current thresholds, and a classifier
+that reads only the 48 final joint angles. This removes any need for
+vision or added tactile arrays during recognition, unlike most grasp based recognition found in robotic hands. The system also
+retains individual physical trials, supports retaking mistaken
+recordings, and reports uncertainty rather than forcing every
+measurement into a known class, it has a strict confidence rule, and retakes measurements until it is confident in the identified class.
+The innovation is an evaluated physical implementation of this specific sensing and decision pipeline.
+
+\section{Methodology}
+
+We used a four-finger, 16-actuator anthropomorphic dexterous LEAP Hand as created by \citet{ShawAgarwalPathak2023}.
+We programmed and ran with the same three
+configured grips for each item. Objects were placed near a consistent
+palm location. During each grip, all joints advanced toward preset
+targets. If a moving joint's measured motor current exceeded its
+threshold, the entire finger stopped, while other fingers continued.
+The controller then recorded all 16 final angles and moved to the
+next grip. Five physical trials were collected for each of 14
+household items and for the empty-hand condition, yielding 75 real
+48-angle vectors. Motor currents controlled stopping but were not
+classifier features.
+
+Each angle was normalized using its configured start and target
+values. The neural model had 48 inputs, one 24-unit tanh hidden layer,
+and 15 softmax outputs. Training used Adam and small Gaussian angle
+perturbations, applied only to training folds. Three-fold validation
+kept real trials separate from their synthetic copies. The model's
+top class, confidence margin, and distance to recorded examples
+determined whether a reading was accepted, uncertain, or unknown.
+A nearest-trial baseline was evaluated by leaving out one real trial
+at a time. Saved trial CSV files and validation reports supported the
+analysis.
+
+\section{Results and Conclusions}
+
+The neural model classified 70 of 75 held-out physical trials
+correctly before the uncertainty rule, an internal accuracy of
+93.3\%. It accepted 67 readings as known; 65 of these were correct,
+while eight readings were uncertain. The separate nearest-trial
+evaluation obtained 69 correct labels out of 75. Most corresponding joint angles are close,
+while differences occur across multiple joints and grips; this
+motivates use of the complete angle vector rather than one
+hand-chosen threshold. The results
+establish feasibility under these recorded conditions, but
+independent sessions, new instances, and unseen classes still
+require prospective tests.
+
+\begin{thebibliography}{3}
+
+\bibitem[{Shaw et~al.(2023)Shaw, Agarwal, and Pathak}]{ShawAgarwalPathak2023}
+Shaw, K., Agarwal, A., Pathak, D., 2023. Leap hand: Low-cost, efficient, and anthropomorphic hand for robot learning.
+\url{https://arxiv.org/abs/2309.06440}
+
+\bibitem[V\'{a}squez and Perdereau(2017)]{Vasquez2017}
+V\'{a}squez, A. and Perdereau, V. (2017).
+Proprioceptive shape signatures for object manipulation and
+recognition purposes in a robotic hand.
+\emph{Robotics and Autonomous Systems}, 98, 135--146.
+\url{https://doi.org/10.1016/j.robot.2017.06.001}.
+
+\bibitem[Sintov and Meir(2023)]{Sintov2023}
+Sintov, A. and Meir, I. (2023).
+Simple kinesthetic haptics for object recognition.
+\emph{The International Journal of Robotics Research}, 42(7), 537--561.
+\url{https://doi.org/10.1177/02783649231182486}.
+
+\end{thebibliography}
+
+\end{document}
