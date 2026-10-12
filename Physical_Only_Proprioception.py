@@ -317,7 +317,7 @@ def prepare_trial(name, class_name, trial):
     return folder
 
 
-def collect_one_trial(name, on_angles=None, on_grip=None):
+def collect_one_trial(name, on_angles=None, on_grip=None, stop_event=None):
     pending = pending_trials(name)
     if not pending:
         return None
@@ -326,7 +326,8 @@ def collect_one_trial(name, on_angles=None, on_grip=None):
     hand = open_hand()
     try:
         try:
-            angles = grasp(hand, on_angles=on_angles, on_grip=on_grip)
+            angles = grasp(hand, on_angles=on_angles, on_grip=on_grip,
+                           stop_event=stop_event)
             save_grasp(folder)
         finally:
             release_hand(hand)
@@ -444,7 +445,8 @@ def collect_dataset(name):
     return train_dataset(name)
 
 
-def retake_trial(name, class_name, trial, hand=None, on_angles=None, on_grip=None):
+def retake_trial(name, class_name, trial, hand=None, on_angles=None, on_grip=None,
+                 stop_event=None):
     plan = read_collection(name)
     class_name = class_name.strip().lower()
     if class_name not in plan["trial_counts"]:
@@ -465,7 +467,8 @@ def retake_trial(name, class_name, trial, hand=None, on_angles=None, on_grip=Non
             hand = open_hand()
         try:
             try:
-                grasp(hand, on_angles=on_angles, on_grip=on_grip)
+                grasp(hand, on_angles=on_angles, on_grip=on_grip,
+                      stop_event=stop_event)
                 save_grasp(replacement)
             finally:
                 release_hand(hand)

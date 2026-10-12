@@ -5,9 +5,8 @@ Wraps a MuJoCo model loaded from a URDF/XML file and provides the same
 control API as LeapHand (set_goal_positions_degree, get_state, reset, close)
 so that ExArm can use either backend interchangeably.
 
-The simulation viewer is launched in passive (non-blocking) mode and synced
-after every state change. Optional marker spheres can be rendered in the
-viewer to visualise IK target positions.
+The optional simulation viewer runs in passive mode and syncs after each
+state change. Marker spheres can visualise IK targets when it is open.
 """
 
 import mujoco
@@ -36,17 +35,19 @@ class SimHand:
     # Inverse permutation: MuJoCo qpos index → logical index (used when reading back)
     REAL_TO_SIM = np.argsort(SIM_TO_REAL)
 
-    def __init__(self, model_path):
+    def __init__(self, model_path, show_viewer=True):
         """
-        Load the MuJoCo model and launch the passive viewer.
+        Load the MuJoCo model, optionally with a passive viewer.
 
         Parameters
         ----------
         model_path : str — path to the URDF or MuJoCo XML file.
+        show_viewer : bool — open a separate viewer window.
         """
         self.model  = mujoco.MjModel.from_xml_path(model_path)
         self.data   = mujoco.MjData(self.model)
-        self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+        self.viewer = (mujoco.viewer.launch_passive(self.model, self.data)
+                       if show_viewer else None)
 
         # Holds (N, 3) marker positions for optional IK target visualisation
         self.custom_marker_positions = np.zeros((0, 3), dtype=np.float64)
@@ -64,7 +65,7 @@ class SimHand:
         """
         mujoco.mj_forward(self.model, self.data)
         self._draw_custom_markers()
-        if self.viewer.is_running():
+        if self.viewer is not None and self.viewer.is_running():
             self.viewer.sync()
 
     # ------------------------------------------------------------------ #
@@ -154,7 +155,7 @@ class SimHand:
 
     def close(self):
         """Close the MuJoCo viewer window if it is still open."""
-        if self.viewer.is_running():
+        if self.viewer is not None and self.viewer.is_running():
             self.viewer.close()
 
     # ------------------------------------------------------------------ #
@@ -183,6 +184,8 @@ class SimHand:
         cleared and rebuilt every frame to avoid accumulating stale markers.
         Silently no-ops on MuJoCo versions that do not expose user_scn.
         """
+        if self.viewer is None:
+            return
         if not hasattr(self.viewer, "user_scn"):
             print("[SimHand] viewer has no user_scn attribute in this mujoco version.")
             return

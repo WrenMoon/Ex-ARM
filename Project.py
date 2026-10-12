@@ -152,6 +152,7 @@ def diagnostics_menu():
 def main():
     while True:
         choice = choose("Ex-ARM", [
+            (0, "Open the complete project UI"),
             (1, "Physical-only object recognition"),
             (2, "Simulation-trained object recognition"),
             (3, "Pose tools"),
@@ -159,7 +160,9 @@ def main():
             (5, "Hand diagnostics"),
             (6, "Quit"),
         ])
-        if choice == "1":
+        if choice == "0":
+            run_program("Super_UI.py")
+        elif choice == "1":
             physical_menu()
         elif choice == "2":
             simulation_menu()
@@ -172,7 +175,7 @@ def main():
         elif choice == "6":
             return
         else:
-            print("Choose 1 through 6")
+            print("Choose 0 through 6")
 
 
 if __name__ == "__main__":

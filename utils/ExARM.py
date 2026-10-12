@@ -1,4 +1,6 @@
 import _thread
+import os
+import numpy as np
 
 from pynput import keyboard
 
@@ -28,6 +30,7 @@ class ExArm:
 
         # Sim args
         model_path=None,
+        show_viewer=None,
     ):
         """
         Parameters
@@ -38,6 +41,7 @@ class ExArm:
         baudrate    : Dynamixel baud rate, e.g. 4000000 (hardware only)
         offsets     : (16,) per-joint angle offsets in degrees (hardware only)
         model_path  : path to the MuJoCo URDF/XML model file (sim only)
+        show_viewer : open a separate MuJoCo window; defaults off inside Project Studio
         """
         mode = mode.lower()
 
@@ -47,6 +51,8 @@ class ExArm:
             )
 
         self.mode = mode
+        if show_viewer is None:
+            show_viewer = os.environ.get("EXARM_UI") != "1"
 
         self.real = None
         self.sim = None
@@ -65,7 +71,7 @@ class ExArm:
 
             if mode in ("sim", "both"):
                 self.sim = SimHand(
-                    model_path=model_path
+                    model_path=model_path, show_viewer=show_viewer
                 )
         except Exception:
             self._spacebar_listener.stop()

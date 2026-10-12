@@ -120,6 +120,9 @@ class Proprioception:
     recognition_result_path = "Data/Proprioception/recognition_result.json"
 
     viewer_refresh_s = 1 / 60
+    viewer_distance_m = 0.35
+    viewer_azimuth_deg = 140
+    viewer_elevation_deg = -25
 
 
 class PhysicalOnly:
@@ -150,3 +153,20 @@ class PhysicalOnly:
     network_min_margin = 0.20
     network_distance_multiplier = 1.5
     network_max_grasps = 3
+
+
+class Studio:
+    camera_index = 0
+    camera_capture_width = 640
+    camera_capture_height = 480
+    camera_width = 420
+    camera_height = 315
+    camera_poll_ms = 40
+    direct_smoothing_alpha = 0.2
+    pose_min_deg = -180
+    pose_max_deg = 180
+    pose_send_seconds = 1.0
+    pose_autosave_path = "Data/Pose_Sessions/studio_autosave.json"
+    motion_update_period_s = 0.03
+    motion_replay_hz = 60
+    motion_record_hz = 30

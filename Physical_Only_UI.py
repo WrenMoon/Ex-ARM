@@ -599,7 +599,7 @@ class Dialog(tk.Toplevel):
         self.result = False
         self.title(title)
         self.resizable(False, False)
-        self.transient(root)
+        self.transient(root.winfo_toplevel())
         color = {"confirm": ACCENT, "error": RED, "info": BLUE}[kind]
         tk.Frame(self, bg=color, height=px(4)).pack(fill="x")
         body = tk.Frame(self, bg=CARD, padx=px(26), pady=px(22))
@@ -660,6 +660,9 @@ class HandView(tk.Canvas):
         self.spinning = False
         self.resize_job = None
         self.error = None
+        self.markers = None
+        self.caption = None
+        self.last_hand_angles = list(Proprioception.grip[0]["start_angles"])
         try:
             import mujoco
             import numpy as np
@@ -686,6 +689,9 @@ class HandView(tk.Canvas):
                                         -model.geom_pos[geom][2])
                 mujoco.mju_mulQuat(model.geom_quat[geom], flip, model.geom_quat[geom].copy())
             self.data = mujoco.MjData(self.model)
+            self.hand_model = self.model
+            self.hand_data = self.data
+            self.scenario = None
             self.camera = mujoco.MjvCamera()
             self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
             self.data.qpos[:] = np.radians(Proprioception.grip[0]["start_angles"])[self.joint_order]
@@ -693,6 +699,8 @@ class HandView(tk.Canvas):
             low, high = self.data.geom_xpos.min(axis=0), self.data.geom_xpos.max(axis=0)
             self.center = (low + high) / 2
             self.span = float(np.linalg.norm(high - low))
+            self.hand_center = self.center.copy()
+            self.hand_span = self.span
             self.backdrop = None
             self.reset_view(draw=False)
             self.ready = True
@@ -708,9 +716,15 @@ class HandView(tk.Canvas):
     def reset_view(self, draw=True):
         if not hasattr(self, "camera"):
             return
-        self.camera.lookat[:] = self.center
-        self.camera.distance = self.span * 1.3
-        self.camera.azimuth, self.camera.elevation = self.DEFAULT_VIEW
+        if self.scenario is None:
+            self.camera.lookat[:] = self.center
+            self.camera.distance = self.span * 1.3
+            self.camera.azimuth, self.camera.elevation = self.DEFAULT_VIEW
+        else:
+            self.camera.lookat[:] = Proprioception.mount_translation_m
+            self.camera.distance = Proprioception.viewer_distance_m
+            self.camera.azimuth = Proprioception.viewer_azimuth_deg
+            self.camera.elevation = Proprioception.viewer_elevation_deg
         if draw:
             self.draw()
 
@@ -745,13 +759,58 @@ class HandView(tk.Canvas):
     def set_pose(self, angles):
         if not self.ready or len(angles) != 16:
             return
+        if self.scenario is not None:
+            self.show_hand()
+        self.last_hand_angles = list(angles)
         self.data.qpos[:] = self.np.radians(angles)[self.joint_order]
         self.mujoco.mj_forward(self.model, self.data)
         self.draw()
 
+    def show_simulation(self, simulation):
+        """Display a recorded object grasp in this same renderer."""
+        if not self.ready:
+            return
+        self.scenario = simulation
+        self.span = Proprioception.viewer_distance_m / 1.3
+        self._change_scene(simulation.model, simulation.data)
+        self.set_caption("RECORDED  ·  OBJECT GRASP")
+        self.reset_view()
+
+    def show_hand(self):
+        if not self.ready or self.scenario is None:
+            return
+        self.scenario = None
+        self._change_scene(self.hand_model, self.hand_data)
+        self.center = self.hand_center.copy()
+        self.span = self.hand_span
+        self.set_caption(None)
+        self.reset_view()
+
+    def _change_scene(self, model, data):
+        if self.renderer is not None:
+            self.renderer.close()
+            self.renderer = None
+        self.model, self.data = model, data
+        self.model.vis.global_.offwidth = 2400
+        self.model.vis.global_.offheight = 1800
+        self.size = None
+        self.rebuild()
+
     def set_live(self, value):
         self.live = value
         self.draw_overlay()
+
+    def set_caption(self, caption):
+        self.caption = caption
+        self.draw_overlay()
+
+    def set_target_markers(self, positions):
+        if self.ready:
+            if positions is None:
+                self.markers = None
+            else:
+                # The presentation hand is flipped around X above.
+                self.markers = self.np.asarray(positions, dtype=float) * [1, -1, -1]
 
     def toggle_spin(self):
         self.spinning = not self.spinning
@@ -801,6 +860,18 @@ class HandView(tk.Canvas):
             return
         try:
             self.renderer.update_scene(self.data, camera=self.camera)
+            if self.markers is not None and hasattr(self.renderer, "scene"):
+                scene = self.renderer.scene
+                for position in self.markers:
+                    if scene.ngeom >= scene.maxgeom:
+                        break
+                    self.mujoco.mjv_initGeom(
+                        scene.geoms[scene.ngeom],
+                        self.mujoco.mjtGeom.mjGEOM_SPHERE,
+                        self.np.array([0.005, 0, 0]), position,
+                        self.np.eye(3).ravel(),
+                        self.np.array([1.0, 0, 0, 0.85]))
+                    scene.ngeom += 1
             pixels = self.renderer.render()
             empty = pixels.max(axis=2) < 4
             pixels = self.np.where(empty[:, :, None], self.backdrop, pixels)
@@ -827,8 +898,9 @@ class HandView(tk.Canvas):
         if width < 10:
             return
         color = AMBER if self.live else ACCENT
-        text = "LIVE  ·  MEASURED ANGLES" if self.live else "IDLE  ·  START POSE"
-        rounded(self, px(12), px(12), px(12) + px(196), px(40), px(10), fill="#0b1120",
+        text = self.caption or ("LIVE  ·  MEASURED ANGLES" if self.live
+                                else "IDLE  ·  START POSE")
+        rounded(self, px(12), px(12), px(12) + px(235), px(40), px(10), fill="#0b1120",
                 outline=BORDER, tags="overlay")
         self.create_oval(px(24), px(22), px(32), px(30), fill=color, outline="",
                          tags="overlay")
@@ -889,14 +961,19 @@ def dataset_info(name):
 
 
 class PhysicalOnlyUI:
-    def __init__(self, root):
+    def __init__(self, root, embedded=False, shared_preview=None, shared_joints=None):
         self.root = root
-        self.root.title("Ex-ARM  |  Physical Proprioception Studio")
-        self.root.geometry(f"{px(PhysicalOnly.ui_width)}x{px(PhysicalOnly.ui_height)}")
-        self.root.minsize(px(1280), px(780))
+        self.embedded = embedded
+        self.shared_preview = shared_preview
+        if not embedded:
+            self.root.title("Ex-ARM  |  Physical Proprioception Studio")
+            self.root.geometry(f"{px(PhysicalOnly.ui_width)}x{px(PhysicalOnly.ui_height)}")
+            self.root.minsize(px(1280), px(780))
         self.root.configure(bg=BG)
         self.events = Queue()
         self.busy = False
+        self.cancelable = False
+        self.stop_event = threading.Event()
         self.recognition_session = None
         self.last_recognition = None
         self.score_dataset = None
@@ -913,22 +990,29 @@ class PhysicalOnlyUI:
         body = tk.Frame(root, bg=BG)
         body.grid(row=1, column=0, sticky="nsew", padx=px(20), pady=(0, px(6)))
         body.grid_rowconfigure(0, weight=1)
-        body.grid_columnconfigure(0, minsize=px(390), weight=0)
-        body.grid_columnconfigure(1, minsize=px(430), weight=5)
-        body.grid_columnconfigure(2, minsize=px(440), weight=4)
+        body.grid_columnconfigure(0, minsize=px(370 if shared_preview else 390), weight=0)
+        body.grid_columnconfigure(1, minsize=px(390 if shared_preview else 430), weight=5)
+        if shared_preview is None:
+            body.grid_columnconfigure(2, minsize=px(440), weight=4)
         self.build_sidebar(body)
         self.build_results(body)
-        self.build_hand(body)
+        if shared_preview is None:
+            self.build_hand(body)
+        else:
+            self.preview = shared_preview
+            self.joints = shared_joints
         self.build_footer()
 
-        self.root.bind_all("<MouseWheel>", self.wheel)
-        self.root.bind_all("<Button-4>", self.wheel)
-        self.root.bind_all("<Button-5>", self.wheel)
+        if not embedded:
+            self.root.bind_all("<MouseWheel>", self.wheel)
+            self.root.bind_all("<Button-4>", self.wheel)
+            self.root.bind_all("<Button-5>", self.wheel)
         self.show_page(0)
         self.refresh_dataset()
         self.log("Studio ready. Choose a dataset, then collect, train, or recognize.")
         self.root.after(PhysicalOnly.ui_poll_ms, self.read_events)
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        if not embedded:
+            self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     # ---------- styling helpers ----------
 
@@ -991,6 +1075,8 @@ class PhysicalOnlyUI:
         return cell, heading, label
 
     def wheel(self, event):
+        if self.embedded and not self.root.winfo_ismapped():
+            return
         if getattr(event, "num", 0) in (4, 5):
             direction = -1 if event.num == 4 else 1
         else:
@@ -1010,15 +1096,18 @@ class PhysicalOnlyUI:
     def build_header(self):
         header = tk.Frame(self.root, bg=BG)
         header.grid(row=0, column=0, sticky="ew", padx=px(20), pady=(px(16), px(14)))
-        logo = tk.Canvas(header, width=px(46), height=px(46), bg=BG, highlightthickness=0)
-        rounded(logo, 0, 0, px(46), px(46), px(13), fill=ACCENT, outline="")
-        logo.create_text(px(23), px(23), text="EX", fill=BG, font=font(15, "bold"))
-        logo.pack(side="left")
-        titles = tk.Frame(header, bg=BG)
-        titles.pack(side="left", padx=(px(14), 0))
-        self.text(titles, "Physical Proprioception Studio", 19, TEXT, "bold").pack(anchor="w")
-        self.text(titles, "Ex-ARM  ·  LEAP Hand object recognition from joint angles alone",
-                  10, MUTED).pack(anchor="w")
+        if not self.embedded:
+            logo = tk.Canvas(header, width=px(46), height=px(46), bg=BG,
+                             highlightthickness=0)
+            rounded(logo, 0, 0, px(46), px(46), px(13), fill=ACCENT, outline="")
+            logo.create_text(px(23), px(23), text="EX", fill=BG, font=font(15, "bold"))
+            logo.pack(side="left")
+            titles = tk.Frame(header, bg=BG)
+            titles.pack(side="left", padx=(px(14), 0))
+            self.text(titles, "Physical Proprioception Studio", 19, TEXT,
+                      "bold").pack(anchor="w")
+            self.text(titles, "Ex-ARM  ·  LEAP Hand object recognition from joint angles alone",
+                      10, MUTED).pack(anchor="w")
 
         pill = tk.Frame(header, bg=CARD, highlightthickness=1, highlightbackground=BORDER)
         pill.pack(side="right")
@@ -1029,11 +1118,13 @@ class PhysicalOnlyUI:
                                     width=22, anchor="w")
         self.status_pill.pack(side="left", padx=(0, px(12)))
 
-        Chip(header, f"REAL HAND  ·  {Connection.Port}  ·  {Connection.baudrate // 1000000} Mbps",
-             MUTED).pack(side="right", padx=px(14))
+        if not self.embedded:
+            Chip(header, f"REAL HAND  ·  {Connection.Port}  ·  "
+                 f"{Connection.baudrate // 1000000} Mbps",
+                 MUTED).pack(side="right", padx=px(14))
 
         group = tk.Frame(header, bg=BG)
-        group.pack(side="right")
+        group.pack(side="left" if self.embedded else "right")
         self.text(group, "DATASET", 9, MUTED, "bold").pack(side="left", padx=(0, px(10)))
         self.dataset_box = ttk.Combobox(group, textvariable=self.dataset, width=22,
                                         style="Dataset.TCombobox", font=font(12))
@@ -1695,7 +1786,8 @@ class PhysicalOnlyUI:
 
             def work():
                 result = collect_one_trial(name, on_angles=self.queue_angles,
-                                           on_grip=self.queue_grip)
+                                           on_grip=self.queue_grip,
+                                           stop_event=self.stop_event)
                 if result["remaining"] == 0:
                     train_dataset(name)
                 return result
@@ -1740,7 +1832,8 @@ class PhysicalOnlyUI:
             self.run_job(f"Retaking {class_name} #{trial}",
                          lambda: retake_trial(name, class_name, trial,
                                               on_angles=self.queue_angles,
-                                              on_grip=self.queue_grip),
+                                              on_grip=self.queue_grip,
+                                              stop_event=self.stop_event),
                          lambda result: self.trial_retaken(class_name, trial), live=True)
         except (OSError, ValueError, FileNotFoundError) as error:
             self.error("Retake trial", error)
@@ -1859,7 +1952,8 @@ class PhysicalOnlyUI:
         hand = open_hand()
         try:
             try:
-                angles = grasp(hand, on_angles=self.queue_angles, on_grip=self.queue_grip)
+                angles = grasp(hand, on_angles=self.queue_angles,
+                               on_grip=self.queue_grip, stop_event=self.stop_event)
                 grasp_folder = session["folder"] / f"grasp_{number}"
                 save_grasp(grasp_folder)
             finally:
@@ -1983,6 +2077,8 @@ class PhysicalOnlyUI:
             self.set_status("Wait for the current operation to finish", "warn")
             return
         self.set_busy(True, label, live)
+        self.cancelable = live
+        self.stop_event.clear()
         self.log(label + "...")
 
         def worker():
@@ -2004,6 +2100,7 @@ class PhysicalOnlyUI:
                     self.joints.set_grip(value)
                 elif kind == "done":
                     self.set_busy(False)
+                    self.cancelable = False
                     callback, result = value
                     try:
                         callback(result)
@@ -2011,11 +2108,15 @@ class PhysicalOnlyUI:
                         self.error("Display failed", error)
                 elif kind == "error":
                     self.set_busy(False)
+                    self.cancelable = False
                     self.recognition_session = None
                     self.last_recognition = None
                     self.refresh_dataset()
                     self.clear_output()
-                    self.error("Operation failed", value)
+                    if isinstance(value, InterruptedError):
+                        self.set_status("Grasp stopped; hand reopened", "warn")
+                    else:
+                        self.error("Operation failed", value)
         except Empty:
             pass
         self.root.after(PhysicalOnly.ui_poll_ms, self.read_events)
@@ -2024,9 +2125,12 @@ class PhysicalOnlyUI:
         if self.busy:
             Dialog.show(self.root, "Operation in progress",
                         "Wait for the grasp or training to finish before closing.", "info")
-            return
-        self.preview.close()
-        self.root.destroy()
+            return False
+        if self.shared_preview is None:
+            self.preview.close()
+        if not self.embedded:
+            self.root.destroy()
+        return True
 
 
 def main():

@@ -1,5 +1,6 @@
 """Choose and replay recorded training grasps in the MuJoCo viewer."""
 
+import argparse
 import csv
 from pathlib import Path
 from queue import SimpleQueue
@@ -88,9 +89,9 @@ def show_scenario(key, frames):
                                       key_callback=keys.put) as viewer:
         with viewer.lock():
             viewer.cam.lookat[:] = Proprioception.mount_translation_m
-            viewer.cam.distance = 0.35
-            viewer.cam.azimuth = 140
-            viewer.cam.elevation = -25
+            viewer.cam.distance = Proprioception.viewer_distance_m
+            viewer.cam.azimuth = Proprioception.viewer_azimuth_deg
+            viewer.cam.elevation = Proprioception.viewer_elevation_deg
 
         while viewer.is_running():
             changed = False
@@ -140,12 +141,23 @@ def show_scenario(key, frames):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--object", dest="object_name")
+    parser.add_argument("--scale", type=int)
+    args = parser.parse_args()
+    if (args.object_name is None) != (args.scale is None):
+        parser.error("--object and --scale must be given together")
     scenarios = load_training_steps()
     order = [(entry["class_name"], scale)
              for entry in Proprioception.objects
              for scale in sorted((value for name, value in scenarios
                                   if name == entry["class_name"]), reverse=True)]
-    selection = choose_scenario(scenarios)
+    chosen_in_ui = args.object_name is not None
+    selection = (args.object_name, args.scale) if chosen_in_ui else choose_scenario(scenarios)
+    if selection is not None and selection not in scenarios:
+        parser.error(f"No recorded grasp for {selection[0]} at {selection[1]}%")
+    if selection is not None and selection not in order:
+        parser.error("Selected object is not in the current object configuration")
     while selection is not None:
         action = show_scenario(selection, scenarios[selection])
         if action == "quit":
@@ -154,7 +166,7 @@ def main():
             step = 1 if action == "next" else -1
             selection = order[(order.index(selection) + step) % len(order)]
         else:
-            selection = choose_scenario(scenarios)
+            selection = None if chosen_in_ui else choose_scenario(scenarios)
 
 
 if __name__ == "__main__":

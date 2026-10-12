@@ -9,8 +9,9 @@ from utils.Constants import Connection, Proprioception
 from utils.ProprioceptionModel import ProprioceptionModel
 
 
-def recognize(leap_hand, model):
-    final_angles = grasp(leap_hand)
+def recognize(leap_hand, model, on_angles=None, stop_event=None):
+    final_angles = grasp(leap_hand, on_angles=on_angles,
+                         stop_event=stop_event)
     result = model.predict(final_angles)
 
     if result["class_name"] == "unknown":

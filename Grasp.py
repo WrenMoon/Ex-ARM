@@ -7,7 +7,14 @@ import time
 from utils.Constants import Connection, Proprioception
 
 
-def grasp_one(leap_hand, grip, grip_number, on_angles=None):
+def wait_or_stop(duration, stop_event):
+    if stop_event is None:
+        time.sleep(duration)
+    elif stop_event.wait(duration):
+        raise InterruptedError("Grasp stopped")
+
+
+def grasp_one(leap_hand, grip, grip_number, on_angles=None, stop_event=None):
     current_positions = grip["start_angles"].copy()
     stopped_fingers = [False] * 4
     log = []
@@ -16,16 +23,18 @@ def grasp_one(leap_hand, grip, grip_number, on_angles=None):
     print(f"Starting grip {grip_number}/{len(Proprioception.grip)}")
     leap_hand.set_torque_enabled(True)
     leap_hand.set_goal_positions_degree(current_positions)
-    time.sleep(Proprioception.settle_time_s)
+    wait_or_stop(Proprioception.settle_time_s, stop_event)
 
     for step in range(Proprioception.max_grasp_steps):
+        if stop_event is not None and stop_event.is_set():
+            raise InterruptedError("Grasp stopped")
         state = leap_hand.get_state()
         real_state = state.get("real") if isinstance(state, dict) else state
         if not isinstance(real_state, (tuple, list)) or len(real_state) != 3:
             read_failures += 1
             if read_failures >= Proprioception.max_read_failures:
                 raise RuntimeError("Unable to read the real hand state")
-            time.sleep(Proprioception.step_time_s)
+            wait_or_stop(Proprioception.step_time_s, stop_event)
             continue
 
         read_failures = 0
@@ -81,14 +90,16 @@ def grasp_one(leap_hand, grip, grip_number, on_angles=None):
         if all(stopped_fingers):
             print(f"Grip {grip_number} completed")
             break
-        time.sleep(Proprioception.step_time_s)
+        wait_or_stop(Proprioception.step_time_s, stop_event)
     else:
         raise RuntimeError("Grasp exceeded the maximum number of steps")
 
-    time.sleep(Proprioception.step_time_s)
+    wait_or_stop(Proprioception.step_time_s, stop_event)
     deadline = time.monotonic() + Proprioception.final_read_timeout_s
     waiting_for_state = False
     while True:
+        if stop_event is not None and stop_event.is_set():
+            raise InterruptedError("Grasp stopped")
         final_state = leap_hand.get_state()
         final_state = final_state.get("real") if isinstance(final_state, dict) else final_state
         if isinstance(final_state, (tuple, list)) and len(final_state) == 3:
@@ -104,7 +115,7 @@ def grasp_one(leap_hand, grip, grip_number, on_angles=None):
         if not waiting_for_state:
             print("Waiting for the final hand angles...")
             waiting_for_state = True
-        time.sleep(Proprioception.final_read_retry_s)
+        wait_or_stop(Proprioception.final_read_retry_s, stop_event)
     final_positions = [float(value) for value in final_state[0]]
     if on_angles is not None:
         on_angles(final_positions)
@@ -115,10 +126,12 @@ def grasp_one(leap_hand, grip, grip_number, on_angles=None):
     return final_positions, log
 
 
-def grasp(leap_hand, on_angles=None, on_grip=None):
+def grasp(leap_hand, on_angles=None, on_grip=None, stop_event=None):
     if not Proprioception.grip:
         raise ValueError("Add at least one grip to Proprioception.grip")
     for grip_number, grip in enumerate(Proprioception.grip, 1):
+        if stop_event is not None and stop_event.is_set():
+            raise InterruptedError("Grasp stopped")
         for key in ("start_angles", "max_angles", "step_sizes", "max_currents"):
             if len(grip[key]) != 16:
                 raise ValueError(f"Grip {grip_number} needs 16 {key}")
@@ -127,7 +140,8 @@ def grasp(leap_hand, on_angles=None, on_grip=None):
     for grip_number, grip in enumerate(Proprioception.grip, 1):
         if on_grip is not None:
             on_grip(grip_number)
-        angles, grip_log = grasp_one(leap_hand, grip, grip_number, on_angles)
+        angles, grip_log = grasp_one(leap_hand, grip, grip_number,
+                                      on_angles, stop_event)
         final_angles.extend(angles)
         log.extend(grip_log)
     print("All grips completed")

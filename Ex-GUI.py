@@ -490,8 +490,12 @@ class PoseEditorGUI:
 
     def __init__(self, root):
         self.root         = root
+        self.closed       = False
         self.root.title("LEAP Hand Pose Sequencer: Ex-GUI")
-        self.root.state("zoomed")
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            self.root.geometry("1600x950")
         self.root.tk.call("tk", "scaling", 2.5)
 
         # Core data and control objects
@@ -1156,9 +1160,21 @@ class PoseEditorGUI:
 
     def on_closing(self):
         """Clean up threads and autosave before destroying the window."""
+        if self.closed:
+            return
+        self.closed = True
         self.robot_controller.stop_update_thread()
         self.playback_controller.stop()
         self._autosave()
+        if self.robot_controller.robot:
+            try:
+                self.robot_controller.robot.set_torque_enabled(False)
+            except Exception as error:
+                print(f"Could not disable torque while closing: {error}")
+            try:
+                self.robot_controller.robot.close()
+            except Exception as error:
+                print(f"Could not close the hand connection: {error}")
         self.root.destroy()
 
 
@@ -1166,7 +1182,10 @@ def main():
     root = tk.Tk()
     app  = PoseEditorGUI(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        app.on_closing()
 
 
 if __name__ == "__main__":

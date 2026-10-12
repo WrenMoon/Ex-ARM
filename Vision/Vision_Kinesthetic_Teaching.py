@@ -13,6 +13,8 @@ Vision_Retargeting.py so calibration parameters (AXIS_MAP, PALM_OFFSET,
 HAND_SCALE_M) remain valid.
 """
 
+import argparse
+import math
 import os
 import time
 import pickle
@@ -337,14 +339,17 @@ def replay_motion(name: str, speed: float = 1.0):
     ----------
     name  : motion file base name
     speed : playback speed multiplier (1.0 = recorded speed)
-    robot : if True, send commands to ExArm; if False, preview only
     """
+    if not math.isfinite(speed) or speed <= 0:
+        raise ValueError("Replay speed must be positive and finite")
     traj_path = os.path.join(MOTION_DIR, f"{name}_trajectory.npy")
     if not os.path.exists(traj_path):
         raise FileNotFoundError(f"No trajectory found for '{name}'. Run process first.")
 
     trajectory_deg = np.load(traj_path)
     n_frames = len(trajectory_deg)
+    if n_frames == 0:
+        raise ValueError(f"Motion '{name}' has no frames to replay")
 
     # recorded at ~30 fps; replay at 60 Hz with linear interpolation
     replay_hz   = 60.0
@@ -365,29 +370,32 @@ def replay_motion(name: str, speed: float = 1.0):
     print(f"\nReplaying '{name}' ({n_frames} frames, {total_time:.1f}s) "
           f"at {speed:.1f}x speed...")
 
-    start = time.time()
-    for i in range(n_replay):
-        t = i * dt * speed * record_hz  # virtual frame index in recorded space
-        t0 = int(np.floor(t))
-        t1 = min(t0 + 1, n_frames - 1)
-        frac = t - t0
+    try:
+        start = time.time()
+        for i in range(n_replay):
+            t = i * dt * speed * record_hz  # virtual frame index in recorded space
+            t0 = int(np.floor(t))
+            t1 = min(t0 + 1, n_frames - 1)
+            frac = t - t0
 
-        q = (1 - frac) * trajectory_deg[t0] + frac * trajectory_deg[t1]
-        q = np.round(q, 1)
+            q = (1 - frac) * trajectory_deg[t0] + frac * trajectory_deg[t1]
+            q = np.round(q, 1)
 
-        leap_hand.set_goal_positions_degree(q)
-        leap_hand.set_torque_enabled(True)
+            leap_hand.set_goal_positions_degree(q)
+            leap_hand.set_torque_enabled(True)
 
-        # simple progress print
-        if i % int(replay_hz) == 0:
-            print(f"  replay {i / replay_hz:.1f}s / {total_time / speed:.1f}s")
+            # simple progress print
+            if i % int(replay_hz) == 0:
+                print(f"  replay {i / replay_hz:.1f}s / {total_time / speed:.1f}s")
 
-        # throttle to replay_hz
-        elapsed = time.time() - start
-        target  = i * dt
-        sleep   = target - elapsed
-        if sleep > 0:
-            time.sleep(sleep)
+            # throttle to replay_hz
+            elapsed = time.time() - start
+            target  = i * dt
+            sleep   = target - elapsed
+            if sleep > 0:
+                time.sleep(sleep)
+    finally:
+        leap_hand.close()
 
     print("Replay finished.")
 
@@ -423,6 +431,39 @@ def delete_motion(name: str):
 # ------------------------------------------------------------------ #
 
 def main():
+    parser = argparse.ArgumentParser(description="Record, process, and replay hand motions")
+    parser.add_argument("--action", choices=("record", "process", "replay", "list", "delete", "all"))
+    parser.add_argument("--name")
+    parser.add_argument("--duration", type=float)
+    parser.add_argument("--speed", type=float, default=1.0)
+    args = parser.parse_args()
+    if args.action:
+        if args.action not in ("list",) and not args.name:
+            parser.error("--name is required for this action")
+        if args.name and (args.name in (".", "..") or
+                          any(char not in "abcdefghijklmnopqrstuvwxyz"
+                              "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-"
+                              for char in args.name)):
+            parser.error("--name may use only letters, numbers, spaces, _ and -")
+        if args.duration is not None and (not math.isfinite(args.duration) or args.duration <= 0):
+            parser.error("--duration must be positive and finite")
+        if not math.isfinite(args.speed) or args.speed <= 0:
+            parser.error("--speed must be positive and finite")
+        if args.action in ("record", "all") and args.duration is None:
+            parser.error("--duration is required for recording from the UI")
+        if args.action in ("record", "all"):
+            record_motion(args.name, args.duration)
+        if args.action in ("process", "all"):
+            process_motion(args.name)
+        if args.action in ("replay", "all"):
+            replay_motion(args.name, speed=args.speed)
+        if args.action == "list":
+            for name in list_motions():
+                print(name)
+        if args.action == "delete":
+            delete_motion(args.name)
+        return
+
     kin = LeapKinematics()
     fk_ref = kin.fk(np.zeros(16))
     print("\nFK fingertip positions at zero pose (LEAP frame, metres):")
@@ -482,7 +523,7 @@ def main():
             record_motion(name, dur)
             process_motion(name)
             speed = float(input("Replay speed multiplier (default 1.0): ") or "1.0")
-            replay_motion(name, speed=speed, robot=True)
+            replay_motion(name, speed=speed)
 
         elif choice == "0":
             break

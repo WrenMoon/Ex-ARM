@@ -1,8 +1,9 @@
 from pathlib import Path
 
 
-INPUT = Path("Data/robot.urdf")
-OUTPUT = Path("Data/mujoco_robot.urdf")
+MODEL_FOLDER = Path(__file__).resolve().parent.parent / "Data" / "Leap_Model"
+INPUT = MODEL_FOLDER / "robot.urdf"
+OUTPUT = MODEL_FOLDER / "mujoco_robot.urdf"
 
 
 def convert_urdf():

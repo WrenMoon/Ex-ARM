@@ -19,7 +19,8 @@ import numpy as np
 import os
 import time
 import math
-from utils.Constants import Connection
+import urllib.request
+from utils.Constants import Connection, Studio
 from utils.ExARM import ExArm
 
 # Path to the MediaPipe hand landmarker model file.
@@ -128,6 +129,36 @@ CONNECTIONS = [
 # Main loop                                                            #
 # ------------------------------------------------------------------ #
 
+def landmarks_to_angles(pts):
+    """Map one detected hand to 16 LEAP angles in logical joint order."""
+    idx_mcp = flexion(pts[0], pts[5], pts[6])
+    mid_mcp = flexion(pts[0], pts[9], pts[10])
+    mid_pip = flexion(pts[9], pts[10], pts[11])
+    mid_dip = flexion(pts[10], pts[11], pts[12])
+    ring_mcp = flexion(pts[0], pts[13], pts[14])
+    ring_pip = flexion(pts[13], pts[14], pts[15])
+    ring_dip = flexion(pts[14], pts[15], pts[16])
+    thumb_mcp = flexion(pts[1], pts[2], pts[3])
+    thumb_ip = flexion(pts[2], pts[3], pts[4])
+    angles = np.array([
+        0, idx_mcp, idx_mcp, idx_mcp,
+        0, mid_mcp, mid_pip, mid_dip,
+        0, ring_mcp, ring_pip, ring_dip,
+        90, 0, thumb_mcp, thumb_ip,
+    ], dtype=np.float64)
+    return np.clip(angles, -90, 90)
+
+
+def draw_skeleton(frame, hand, width, height):
+    for a, b in CONNECTIONS:
+        cv2.line(frame,
+                 (int(hand[a].x * width), int(hand[a].y * height)),
+                 (int(hand[b].x * width), int(hand[b].y * height)),
+                 (0, 255, 0), 2)
+    for landmark in hand:
+        cv2.circle(frame, (int(landmark.x * width), int(landmark.y * height)),
+                   5, (0, 0, 255), -1)
+
 def main():
     """
     Open the webcam, detect hand landmarks with MediaPipe, map them to
@@ -144,7 +175,13 @@ def main():
         offsets=Connection.offsets,
         model_path=Connection.model_path
     )
+    try:
+        run_camera(leap_hand)
+    finally:
+        leap_hand.close()
 
+
+def run_camera(leap_hand):
     # Configure MediaPipe HandLandmarker in VIDEO mode for frame-by-frame inference
     BaseOptions          = mp.tasks.BaseOptions
     HandLandmarker       = mp.tasks.vision.HandLandmarker
@@ -163,6 +200,7 @@ def main():
     with HandLandmarker.create_from_options(options) as landmarker:
         cap           = cv2.VideoCapture(0)
         smoothed_pose = np.zeros(16)
+        last_status = 0.0
 
         print("Press Q to quit")
 
@@ -186,63 +224,24 @@ def main():
                 hand = result.hand_landmarks[0]
 
                 # Draw skeleton overlay for visual feedback
-                for a, b in CONNECTIONS:
-                    cv2.line(
-                        frame,
-                        (int(hand[a].x * w), int(hand[a].y * h)),
-                        (int(hand[b].x * w), int(hand[b].y * h)),
-                        (0, 255, 0), 2
-                    )
-                for lm in hand:
-                    cv2.circle(frame, (int(lm.x * w), int(lm.y * h)), 5, (0, 0, 255), -1)
+                draw_skeleton(frame, hand, w, h)
 
                 # Convert normalised landmark list to a (21, 3) NumPy array
                 pts = np.array([[lm.x, lm.y, lm.z] for lm in hand], dtype=np.float64)
 
-                # ---- Per-finger flexion ----
-                # Each finger: [wrist, MCP, PIP] or [MCP, PIP, DIP] triplets
-                idx_mcp  = flexion(pts[0], pts[5],  pts[6])
-                idx_pip  = flexion(pts[5], pts[6],  pts[7])
-                idx_dip  = flexion(pts[6], pts[7],  pts[8])
-
-                mid_mcp  = flexion(pts[0], pts[9],  pts[10])
-                mid_pip  = flexion(pts[9], pts[10], pts[11])
-                mid_dip  = flexion(pts[10], pts[11], pts[12])
-
-                ring_mcp = flexion(pts[0], pts[13], pts[14])
-                ring_pip = flexion(pts[13], pts[14], pts[15])
-                ring_dip = flexion(pts[14], pts[15], pts[16])
-
-                # ---- Thumb angle computation ----
-                # Estimate thumb rotation from the angle of the proximal bone
-                # relative to the camera plane, then offset to match LEAP convention
-                thumb_base   = pts[2] - pts[1]
-                thumb_rotate = (
-                    np.degrees(np.arctan2(thumb_base[0], -thumb_base[1])) - 60
-                )
-                thumb_mcp = flexion(pts[1], pts[2], pts[3])
-                thumb_ip  = flexion(pts[2], pts[3], pts[4])
-
-                # ---- Assemble 16-joint pose vector ----
-                # Logical ordering: index(4) + middle(4) + ring(4) + thumb(4)
-                allegro_pose = np.array([
-                    0,       idx_mcp, idx_mcp, idx_mcp,   # Index  (abduct, flex, pip, dip)
-                    0,       mid_mcp, mid_pip, mid_dip,   # Middle
-                    0,       ring_mcp, ring_pip, ring_dip, # Ring
-                    90,     0,       thumb_mcp, thumb_ip  # Thumb
-                ], dtype=np.float64)
-
-                # Hard clip to safe operating range before sending to hardware
-                allegro_pose = np.clip(allegro_pose, -90, 90)
-
-                os.system("cls" if os.name == "nt" else "clear")
+                allegro_pose = landmarks_to_angles(pts)
 
                 # Exponential moving average to smooth out landmark jitter
-                alpha         = 0.2
+                alpha         = Studio.direct_smoothing_alpha
                 smoothed_pose = alpha * allegro_pose + (1 - alpha) * smoothed_pose
 
-                print("\nLEAP / ALLEGRO FORMAT\n")
-                print(np.round(smoothed_pose, 1))
+                now = time.time()
+                if not os.environ.get("EXARM_UI") or now - last_status >= 0.5:
+                    if not os.environ.get("EXARM_UI"):
+                        os.system("cls" if os.name == "nt" else "clear")
+                    print("\nLEAP / ALLEGRO FORMAT\n")
+                    print(np.round(smoothed_pose, 1))
+                    last_status = now
 
                 leap_hand.set_goal_positions_degree(np.round(smoothed_pose, 1))
                 leap_hand.set_torque_enabled(True)

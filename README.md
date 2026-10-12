@@ -5,11 +5,12 @@ Ex-ARM is a Python repository for controlling a 16-joint LEAP Hand and studying 
 - **Physical-only recognition:** collect labeled real-hand trials and identify an object's class from the final angles of every configured grip. It offers a nearest-trial baseline and a small neural classifier.
 - **Simulation-trained recognition:** grasp fixed CAD objects across a size sweep in MuJoCo, train a class-and-size model, then apply the same grasp to the real hand. This is a separate experimental pipeline; its real-hand accuracy has not been established.
 
-The [manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object physical-only study and reports the available pilot data. The repository does not yet contain a completed 20-class dataset.
+The [manuscript](Manuscript/Manuscript.tex) reports the 15-class physical-only study, including its saved validation results.
 
 ## Contents
 
 - [Choose a program](#choose-a-program)
+- [Project Studio UI](#project-studio-ui)
 - [Install and configure](#install-and-configure)
 - [Repository map](#repository-map)
 - [Shared hand control and conventions](#shared-hand-control-and-conventions)
@@ -24,10 +25,11 @@ The [manuscript](Manuscript/Manuscript.tex) focuses on the planned 20-object phy
 
 ## Choose a program
 
-Start with `python Project.py`. The [project launcher](Project.py) groups the existing scripts into **Physical-only**, **Simulation-trained**, **Pose**, **Vision**, and **Diagnostics** menus. It starts each program in the repository root, where its relative data paths work. The scripts also remain directly runnable:
+Start with `python Super_UI.py` for the complete graphical workflow, or `python Project.py` for the terminal launcher. The terminal launcher has option **0** to open Project Studio and retains its other menus. The scripts also remain directly runnable:
 
 | Goal | Direct command | Requires |
 | --- | --- | --- |
+| Open the complete project UI | `python Super_UI.py` | Tkinter; optional packages for the tools you use |
 | Collect, resume, extend, train, or identify using physical trials | `python Physical_Only_Proprioception.py` | Real hand for collection and recognition; saved trials for training |
 | Open the physical-only presentation window | `python Physical_Only_UI.py` | Tkinter, MuJoCo for the hand preview, real hand for grasps |
 | Run and log one sequence of configured physical grips | `python Grasp.py` | Real hand |
@@ -41,7 +43,20 @@ Start with `python Project.py`. The [project launcher](Project.py) groups the ex
 | Record, process, and replay vision motions | `python -m Vision.Vision_Kinesthetic_Teaching` | Webcam for recording; selected backend for replay |
 | Display live joint state | `python test1.py` | Selected backend |
 
-Run direct commands from the repository root. On macOS, replace `python` with `mjpython` when a command opens a **MuJoCo viewer**, including `View_Proprioception.py` and tools using `Connection.mode = "sim"` or `"both"`. The project launcher chooses `mjpython` for those commands on macOS. Headless simulation training uses ordinary Python. The physical-only UI embeds an offscreen MuJoCo rendering in Tkinter rather than opening the separate viewer.
+Run direct commands from the repository root. On macOS, replace `python` with `mjpython` when a command opens a **separate MuJoCo viewer**, including `View_Proprioception.py` and direct tools using `Connection.mode = "sim"` or `"both"`. The project launcher chooses `mjpython` for those commands on macOS. Headless simulation training uses ordinary Python. The physical-only UI and Project Studio render MuJoCo inside Tkinter and use ordinary Python.
+
+## Project Studio UI
+
+Run `python Super_UI.py`. One workspace keeps the MuJoCo hand on the right while the controls on the left switch between six sections. Drag the hand to rotate, scroll to zoom, or use Reset. During a camera operation, a camera panel opens beside that same hand view; stopping the camera removes the panel. The activity log and Stop button remain visible below the workspace.
+
+- **Physical:** the full physical-only workflow is embedded here. Create or resume datasets, collect and retake trials, add classes or trials, train both models, inspect validation, and recognize with both models from the same grasp. Measured angles appear in the shared hand view.
+- **Simulation:** generate CAD grasps and train the class-and-size model; load a recorded object and size into the shared MuJoCo view; play, pause, and step through its grasp with buttons or Space/arrow keys; run the simulation-trained model on the real hand and see its class, size, and confidence. Its measured angles animate the same view.
+- **Poses:** edit 16 angles and preview them on the shared hand, send a pose to the configured hand, manage a named pose sequence, save/load JSON, copy/import JSON, and play a saved example sequence. Edited sequence playback supports pause, resume, and stop.
+- **Vision:** direct-angle teleoperation and fingertip retargeting show the webcam beside the MuJoCo hand; retargeting also draws its fingertip targets in the hand view. Record motion in that camera panel, process its landmarks, replay the resulting trajectory in the shared hand, or run the full pipeline. Saved motions can also be selected or deleted.
+- **Diagnostics:** read live positions, velocities, and currents; run the shared physical grasp; access the older current-limit experiment.
+- **Tools:** calculate forward or single-finger inverse kinematics, convert the source URDF to its MuJoCo version, and open model and object folders.
+
+The shared MuJoCo rendering is embedded in Tkinter; the camera uses an embedded frame feed. Hardware operations run on background threads so the window stays responsive. Offline simulation training, motion processing, the monitor, and file conversion remain separate background processes, with their output shown in **Tool activity**. Only one UI-controlled hand operation runs at a time. Use **Stop active operation** to end camera control, motion playback, a physical grasp, or a background process. Stopping physical trial collection or recognition reopens the hand and leaves that trial pending. Directly running the original scripts still uses their original windows and terminal controls.
 
 ## Install and configure
 
@@ -66,7 +81,7 @@ The GUI programs also require a Python installation with Tkinter. Vision needs a
 Before a motor-control run, edit [utils/Constants.py](utils/Constants.py):
 
 1. Set `Connection.Port`, `baudrate`, `ids`, and `offsets` for your hand. The checked-in port is `COM3`, which is not a macOS serial-device name.
-2. Set `Connection.mode` to `"real"`, `"sim"`, or `"both"` for the general hand, pose, vision, and diagnostic tools. The checked-in value is `"both"`, so those tools attempt **both hardware and a MuJoCo viewer**.
+2. Set `Connection.mode` to `"real"`, `"sim"`, or `"both"` for the general hand, pose, vision, and diagnostic tools. The checked-in value is `"both"`. In Project Studio, `"both"` commands the physical hand and shows the pose in its embedded MuJoCo view; direct scripts still open their own viewer where applicable.
 3. Check every entry of the ordered `Proprioception.grip` list and its current limits before a trial. `Grasp.py` and both recognition paths use this sequence. `Run_Proprioception.py` requires `Proprioception.hand_mode = "real"`, as checked in.
 4. Place objects at the same position and orientation for training and recognition. The simulation pipeline uses `Proprioception.mount_translation_m` and `mount_rotation_rpy_deg`; the physical-only pipeline relies on consistent real placement.
 
@@ -74,6 +89,8 @@ Before a motor-control run, edit [utils/Constants.py](utils/Constants.py):
 
 ```text
 Project.py                         One menu for the existing programs
+Super_UI.py                        Complete graphical project studio
+Monitor_Hand.py                    Joint-state stream used by Project Studio
 Grasp.py                           Shared controlled real-hand grasp
 Physical_Only_Proprioception.py    Physical trial collection, training, inference
 Physical_Only_UI.py                Presentation UI for that same physical workflow
@@ -155,9 +172,9 @@ For a new study, choose a **new dataset name**, enter at least two class names a
 
 When all planned trials are present, option **1** trains `model.json` automatically. Choose **5 separately** to train `neural_model.npz`. To add data later, first finish any pending collection, then choose **2**. New trials or classes change the dataset: retrain the neural model before option **7**. Use a **new dataset** if you change the grasp, motor IDs, or offsets; the saved plan and models check these settings and reject incompatible measurements.
 
-The checked-in `initial_9` pilot has three real grasps each of a 7.5 cm side-length cube, a 7.5 cm diameter sphere, and a 5 cm diameter cylinder. `Household_1` contains four household classes (`ball`, `bottle`, `bowl`, `mouse`) and a nearest-trial model. These are pilots, not the proposed 20-object experiment.
+The checked-in `initial_9` pilot has three real grasps each of a 7.5 cm side-length cube, a 7.5 cm diameter sphere, and a 5 cm diameter cylinder. `Household_1` contains four household classes (`ball`, `bottle`, `bowl`, `mouse`) and a nearest-trial model. The later `Common Household Objects` dataset contains 15 enrolled labels, including `no object`, with five trials per label.
 
-For the 20-object study, a practical sequence is: create a new named dataset, collect at least three independent real trials per class, train the neural model with option **5**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **2** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts selects `PhysicalOnly.default_dataset_name`, which is `multi_grip_study` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
+For a new study, create a named dataset, collect at least three independent real trials per class, train the neural model with option **5**, inspect its held-out report, then use option **7** or the UI for new recognition runs. Add further trials or classes with option **2** and retrain. Type the dataset name explicitly when training or identifying: pressing Enter at those prompts selects `PhysicalOnly.default_dataset_name`, which is `multi_grip_study` in the checked-in constants. Keep a separate record of object identity, placement, and session for any new test set; the program's built-in folds do not by themselves test a new day or a new physical instance.
 
 ### How it works: two class-only models
 
@@ -169,11 +186,11 @@ The neural evaluation holds out **real trials before generating noise** in up to
 
 A prediction can be a known class, `uncertain` (low top probability or small gap between the two leading classes), or `unknown` (too far from saved physical grasps). In terminal option **7**, an uncertain or unknown result can trigger another placement and grasp, up to `PhysicalOnly.network_max_grasps` (default three). The program averages per-class probabilities and uses the median reference distance across those grasps for the combined decision. It stops early when it accepts a known class. Unknown-object rejection has **not** been validated on a separate unseen-class set.
 
-The checked-in `initial_9` neural report records **9/9** correct held-out pilot trials; its nearest-trial leave-one-out result is also **9/9**. The `Household_1` nearest-trial model records **11/12** leave-one-out trials correct. These results concern repeated grasps of a few available objects and do not establish accuracy for 20 classes, new sizes, new object instances, or new sessions.
+The saved `Common Household Objects` neural report records **70/75** correct held-out trials across 15 labels; the nearest-trial leave-one-out result is **69/75**. These are internal evaluations of the saved physical grasps. The earlier `initial_9` pilot records **9/9** for both methods, and `Household_1` records **11/12** for nearest trial. None of these scores measures performance on new object instances or recording sessions.
 
 ### Use: presentation window
 
-Open `python Physical_Only_UI.py` or choose option **8** in the physical-only terminal menu. The [UI](Physical_Only_UI.py) operates on the **same datasets and models**:
+Open `python Physical_Only_UI.py`, choose option **8** in the physical-only terminal menu, or select **Physical** in [Project Studio](Super_UI.py). The [UI](Physical_Only_UI.py) operates on the **same datasets and models**:
 
 - **Collect:** create a plan, collect the next pending grasp, retake a saved trial, or expand a completed plan. The hand opens after each collection or retake grasp.
 - **Train:** build the nearest-trial model or neural classifier. The nearest-trial card shows a scrollable leave-one-out result for every class and trial; the neural report uses held-out folds instead.
@@ -212,6 +229,8 @@ Put a STEP file in [Data/Objects/](Data/Objects/) and add a matching entry to `P
 
 [Ex-GUI.py](Ex-GUI.py) is a Tkinter pose editor. Choose **Pose tools → Open pose editor** in `Project.py`, or run it directly. Its 16 sliders and angle entries let you edit fingers, copy a finger pose, zero joints, and add, update, duplicate, insert, reorder, or delete named poses. A background controller sends the current angles at about 30 Hz **when torque is enabled**. Playback holds each saved pose for its configured duration; play, pause, and stop are available. The GUI can copy a pose or sequence as a Python-style dictionary and import a pasted sequence.
 
+Project Studio has an integrated pose editor in its **Poses** section. Adjust the 16 sliders or angle fields to update the shared MuJoCo hand; **Send current pose to hand** commands the selected real backend for the configured duration. **Live hand control** keeps the hardware connection open and sends each edited pose until switched off; stopping disables torque. Finger-copy and zero controls are available beside the sliders. Add, update, duplicate, insert, delete, or reorder poses in an edited sequence. Save and load its flat JSON session format, copy or import JSON through the clipboard, and play or pause the edited sequence without opening Ex-GUI. Studio restores its latest edited sequence from `Data/Pose_Sessions/studio_autosave.json` when it starts. The original Ex-GUI retains its own separate autosave.
+
 Manual session save/load uses `Data/Ex-GUI/pose_session.json`; autosave uses `pose_editor_autosave.json` in that folder. These session files are a **list of named poses with flat 16-angle arrays**. If backend connection fails, the GUI reports a warning and uses its mock controller; moving a slider in mock mode does not move the hand.
 
 [Pose_Sequence_Runner.py](Pose_Sequence_Runner.py) plays a **different JSON format** from [Data/Example_pose_series/](Data/Example_pose_series/). Choose a sequence in the project menu or run, for example, `python Pose_Sequence_Runner.py bottle_orient`. Each pose has a positive `duration` and four arrays of four degree angles:
@@ -242,7 +261,7 @@ The three [Vision](Vision/) programs use the included MediaPipe hand-landmarker 
 | [Vision_Retargeting.py](Vision/Vision_Retargeting.py) | Builds a palm frame, maps four human fingertips into the LEAP frame, solves bounded per-finger IK, and smooths the answer | Streams goals and shows an OpenCV preview; press **Q** to exit that window. In simulation mode, it also asks the viewer to draw target markers. |
 | [Vision_Kinesthetic_Teaching.py](Vision/Vision_Kinesthetic_Teaching.py) | Records landmarks, processes them through the same fingertip mapping and IK offline, then interpolates the angle trajectory for replay | Menu options **1 record**, **2 process**, and **3 replay**; generated files go to `Data/Motions/`. |
 
-In the retargeting and teaching scripts, `HAND_SCALE_M`, `AXIS_MAP`, `PALM_OFFSET`, smoothing, and IK settings define the webcam-to-hand calibration. Fingertip positions and IK targets are in the hand's palm frame in **metres**. Retargeting warm-starts the IK solver from the previous video frame. Teaching records `<name>.avi` and `<name>_landmarks.pkl`, processes `<name>_trajectory.npy` of shape `(frames, 16)` in **degrees**, and replays interpolated commands. Its menu can also list and delete saved motions. The combined **record → process → replay** menu option currently passes an unsupported argument to `replay_motion`; use options **1, 2, then 3** separately.
+In the retargeting and teaching scripts, `HAND_SCALE_M`, `AXIS_MAP`, `PALM_OFFSET`, smoothing, and IK settings define the webcam-to-hand calibration. Fingertip positions and IK targets are in the hand's palm frame in **metres**. Retargeting warm-starts the IK solver from the previous video frame. Teaching records `<name>.avi` and `<name>_landmarks.pkl`, processes `<name>_trajectory.npy` of shape `(frames, 16)` in **degrees**, and replays interpolated commands. The Studio's integrated camera recorder saves the same file formats. Its process step uses the existing offline IK program; replay shows poses in the shared MuJoCo panel. The menu and Studio can also list and delete saved motions. The full pipeline records for a chosen duration, processes the data, and replays the motion.
 
 ## Kinematics, diagnostics, and utilities
 
@@ -260,7 +279,7 @@ print(info["success"], info["error_m"])
 
 `test1.py` uses [BoxPrinter.py](utils/BoxPrinter.py) to show live positions, velocities, and currents in an updating terminal layout; it is a **manual diagnostic**, not an automated test. `test2.py` is an older standalone current-threshold experiment with its **own** grasp dictionary. It is not the grasp used for proprioception training or recognition and is not in the project launcher's normal workflow. `utils/BoxPrinter.py` manages ANSI terminal boxes and terminal-size/layout checks.
 
-The hand CAD files are in [Data/Leap_Model/](Data/Leap_Model/): `robot.urdf`, the MuJoCo-compatible `mujoco_robot.urdf`, STL meshes, and part files. [URDF_Convertor.py](utils/URDF_Convertor.py) removes `package:///` mesh prefixes, but its current `INPUT` and `OUTPUT` constants point to `Data/robot.urdf` and `Data/mujoco_robot.urdf`, not the files under `Data/Leap_Model/`. Correct those paths before invoking the converter. The hard-coded limits in `LeapKinematics.py` are independent of the URDF and have not been reconciled with all of the wider grasp limits.
+The hand CAD files are in [Data/Leap_Model/](Data/Leap_Model/): `robot.urdf`, the MuJoCo-compatible `mujoco_robot.urdf`, STL meshes, and part files. [URDF_Convertor.py](utils/URDF_Convertor.py) regenerates the MuJoCo file from the source URDF by removing `package:///` mesh prefixes. The hard-coded limits in `LeapKinematics.py` are independent of the URDF and have not been reconciled with all of the wider grasp limits.
 
 ## Data and configuration reference
 
@@ -287,8 +306,9 @@ Inside `Data/Proprioception/`, simulation training writes `simulation.csv` (one 
 | `Connection` | General backend mode, port, baud rate, motor IDs and offsets, MuJoCo hand-model path |
 | `Proprioception` | Shared grasp, current limits, timing and read retries; CAD objects and reference sizes; fixed mount and scale sweep; simulation noise, class-and-size network, rejection rules, and output paths |
 | `PhysicalOnly` | Dataset root and defaults; UI dimensions; physical-network training, noise, validation, rejection thresholds, and repeat-grasp limit |
+| `Studio` | Embedded camera index and frame size; UI polling; pose editor angle limits and send duration |
 
-There are a few legacy local constants in the vision scripts, the pose runner, kinematics module, and `URDF_Convertor.py`; changing `Constants.py` does not update those automatically. If a saved model says the settings or physical trial fingerprint changed, retrain the corresponding model. Changing the number, order, or angles of the grips requires a **new physical dataset** and rerunning simulation training. The included pilot datasets and reports were recorded with a previous single-grip configuration and cannot train or run the current three-grip models; their reported results are historical.
+There are a few legacy local constants in the vision scripts, the pose runner, and kinematics module; changing `Constants.py` does not update those automatically. If a saved model says the settings or physical trial fingerprint changed, retrain the corresponding model. Changing the number, order, or angles of the grips requires a **new physical dataset** and rerunning simulation training. The early `initial_9` and `Household_1` pilots used an older grip configuration; their reports are historical. The current 15-label dataset uses three grips.
 
 ## Known limits and troubleshooting
 
@@ -304,4 +324,4 @@ There are a few legacy local constants in the vision scripts, the pose runner, k
 | Vision does not track or cannot start | Check the webcam, `Data/hand_landmarker.task`, vision packages, and the calibration constants in the selected script. |
 | The simulation viewer has no scenarios | Run `Train_Proprioception.py` first to create `training_steps.csv`. |
 
-The fixed-pose simulation uses one CAD model per class and direct position stepping; it does not reproduce real compliance or current-triggered stopping. The physical-only pilots use few object instances and repeats, and the 20-object study remains planned. Neither rejection rule has been evaluated against a dedicated unseen-object test set. The repository has no automated hardware or camera test suite; validate each workflow on the actual setup before reporting research performance.
+The fixed-pose simulation uses one CAD model per class and direct position stepping; it does not reproduce real compliance or current-triggered stopping. The physical-only study uses one physical exemplar for each object label and five trials per label. Neither rejection rule has been evaluated against a dedicated unseen-object test set. The repository has no automated hardware or camera test suite; validate each workflow on the actual setup before reporting research performance.

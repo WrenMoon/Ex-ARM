@@ -283,7 +283,13 @@ def main():
         offsets=Connection.offsets,
         model_path=Connection.model_path
     )
+    try:
+        run_camera(leap_hand, kin)
+    finally:
+        leap_hand.close()
 
+
+def run_camera(leap_hand, kin):
     # MediaPipe setup
     BaseOptions           = mp.tasks.BaseOptions
     HandLandmarker        = mp.tasks.vision.HandLandmarker
